@@ -1,0 +1,42 @@
+[project]
+name = "forecast-service"
+version = "0.1.0"
+description = "MLOps-first hourly demand forecasting service. The model is a commodity; the system is the point."
+requires-python = ">=3.11"
+dependencies = [
+    "pandas>=2.0",
+    "numpy>=1.26",
+    "duckdb>=1.0",
+    "pyarrow>=15.0",
+    "scikit-learn>=1.4",
+    "mlflow>=2.12",
+    "fastapi>=0.110",
+    "uvicorn[standard]>=0.29",
+    "pydantic>=2.6",
+    "pyyaml>=6.0",
+    "holidays>=0.45",
+    "prefect>=2.18",
+    "evidently>=0.4",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "httpx>=0.27",
+    "ruff>=0.4",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/forecaster"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]

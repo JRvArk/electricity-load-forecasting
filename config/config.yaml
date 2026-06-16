@@ -1,0 +1,53 @@
+# The ONLY place the domain/dataset is chosen.
+# Swap `source.kind` to point the whole system at a different dataset.
+
+domain:
+  name: electricity_load
+  target_column: load_mw
+  timestamp_column: ts
+  frequency: "1h"
+
+source:
+  # kind: "synthetic" runs the entire pipeline with zero external dependencies.
+  # Swap to "entsoe" or "eia" (or your own) once the system works end to end.
+  kind: synthetic
+  synthetic:
+    base_load: 12000.0       # mean level
+    daily_amplitude: 3000.0  # peak-to-trough daily swing
+    weekly_amplitude: 1500.0 # weekday/weekend swing
+    noise_sd: 400.0
+    seed: 7
+  entsoe:
+    # requires a free token; see CLAUDE.md Phase 1 notes
+    api_token_env: ENTSOE_TOKEN
+    area_code: "10YNL----------L"   # Netherlands
+
+storage:
+  duckdb_path: data/forecast.duckdb
+  raw_table: raw_observations
+  feature_table: features
+
+features:
+  lags: [1, 2, 3, 24, 48, 168]       # hours
+  rolling_windows: [24, 168]         # hours
+  calendar: true
+  holidays_country: NL
+
+training:
+  model: hist_gradient_boosting
+  test_horizon_hours: 168            # last week held out
+  primary_metric: mae                # lower is better
+  random_state: 7
+
+registry:
+  model_name: demand_forecaster
+  production_stage: Production
+
+monitoring:
+  reference_window_hours: 720        # 30 days
+  current_window_hours: 168          # 7 days
+  drift_threshold: 0.5               # share of drifted features that triggers retrain
+
+mlflow:
+  tracking_uri: file:./mlruns
+  experiment: demand-forecasting

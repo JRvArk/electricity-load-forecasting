@@ -1,0 +1,22 @@
+# Phase 4 — service + mlflow. Extend with a Prefect worker in Phase 5.
+services:
+  mlflow:
+    image: ghcr.io/mlflow/mlflow:latest
+    command: mlflow server --host 0.0.0.0 --port 5000 --backend-store-uri /mlruns
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./mlruns:/mlruns
+
+  api:
+    build: .
+    depends_on:
+      - mlflow
+    environment:
+      # point the app at the mlflow service instead of the local file store
+      MLFLOW_TRACKING_URI: http://mlflow:5000
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./data:/app/data
+      - ./mlruns:/app/mlruns
