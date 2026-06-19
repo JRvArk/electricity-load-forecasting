@@ -31,3 +31,19 @@ from forecaster.config import Config, load_config  # noqa: F401  — you'll need
 
 # TODO(rung-3): design and implement.
 # Make this module runnable as:  python -m forecaster.ingestion.ingest
+
+def load_data(cfg: Config) -> None:
+    pass
+
+def store_data(cfg: Config) -> None:
+    pass
+
+def create_synthetic_data(cfg: Config) -> None:
+    pass
+
+def ingest() -> None:
+    pass
+
+if __name__ == "__main__":
+    cfg = load_config()
+    ingest()
