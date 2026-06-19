@@ -1,12 +1,10 @@
-# tests/ — yours to write
+# tests/
 
-This is where your tests go. At rung 3 the workflow for every phase is:
+Tests live here, written before the corresponding implementation — one of the
+hard rules in this project (see `BUILD_PLAN.md`).
 
-  1. Read the target properties in the module docstring (and the done-criterion
-     in CLAUDE.md).
-  2. Write the tests HERE that pin those properties — before you implement.
-  3. Implement until green.
-  4. Diff against reference/ (your tests AND your code).
+Per-phase loop: read the target properties in the module docstring, write tests
+that pin them, implement until green, then diff against the reference solution.
 
 `pyproject.toml` already points pytest at this directory with the right
-pythonpath, so `pytest` just works once you add files.
+pythonpath, so `pytest` just works.

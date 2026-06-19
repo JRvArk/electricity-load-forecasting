@@ -74,11 +74,15 @@ Real data via the EIA open-data API (`source.kind: eia`) is opt-in for live runs
 
 ## Run it
 
+Each command works once the corresponding phase is implemented (see `BUILD_PLAN.md`).
+The stubs are present but empty — that's intentional; implementing them is the exercise.
+
 ```bash
-pip install -e ".[dev]"
-python -m forecaster.ingestion.ingest --backfill-days 90   # land raw data
-python -m forecaster.features.build                        # build features
-python -m forecaster.training.train                        # train + track
-uvicorn forecaster.serving.app:app --reload                # serve the model
-pytest                                                     # tests
+uv sync --extra dev
+python -m forecaster.ingestion.ingest --backfill-days 90   # Phase 1 — land raw data
+python -m forecaster.features.build                        # Phase 2 — build features
+python -m forecaster.training.train                        # Phase 2 — train + track
+mlflow ui                                                  # Phase 2 — inspect runs
+uvicorn forecaster.serving.app:app --reload                # Phase 3 — serve the model
+pytest                                                     # your tests
 ```
