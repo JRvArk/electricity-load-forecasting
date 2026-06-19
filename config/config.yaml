@@ -9,7 +9,8 @@ domain:
 
 source:
   # kind: "synthetic" runs the entire pipeline with zero external dependencies.
-  # Swap to "entsoe" or "eia" (or your own) once the system works end to end.
+  # KEEP IT as the default for dev, tests, and CI — they must stay offline and
+  # deterministic. Flip to "eia" for live runs against real data.
   kind: synthetic
   synthetic:
     base_load: 12000.0       # mean level
@@ -17,8 +18,17 @@ source:
     weekly_amplitude: 1500.0 # weekday/weekend swing
     noise_sd: 400.0
     seed: 7
+  eia:
+    # US Energy Information Administration, open data API v2. Free instant key:
+    # register at https://www.eia.gov/opendata/ and export EIA_API_KEY.
+    api_key_env: EIA_API_KEY
+    base_url: https://api.eia.gov/v2
+    route: electricity/rto/region-data/data   # hourly demand by balancing authority
+    respondent: PJM           # BA code: PJM, CISO, MISO, ERCO, NYIS, ...
+    demand_type: D            # D  = actual demand (your target)
+    forecast_type: DF         # DF = day-ahead demand forecast (your baseline to beat)
   entsoe:
-    # requires a free token; see CLAUDE.md Phase 1 notes
+    # alternative: European/Dutch grid. Free token but ~3 working-day email wait.
     api_token_env: ENTSOE_TOKEN
     area_code: "10YNL----------L"   # Netherlands
 

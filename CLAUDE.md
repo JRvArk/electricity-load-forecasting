@@ -26,8 +26,11 @@ effect engine). Here there is no theory to derive. The difficulty is all wiring.
 2. **Reproducibility.** Every model is produced by a tracked run with logged
    params, metrics, and the exact feature config. No model exists outside MLflow.
 3. **The domain is swappable.** Dataset choice lives in `config/config.yaml`
-   only. No module hardcodes "electricity". A synthetic generator ships as the
-   default source so the entire system runs with zero external dependencies.
+   only. No module hardcodes "electricity". A synthetic generator is the default
+   source so the system runs with zero external dependencies — keep tests and CI
+   on it (they must stay offline and deterministic). Real data (EIA, `kind: eia`)
+   is opt-in for live runs. Wiring that split cleanly is itself the lesson: test
+   against a deterministic fake, run against the real thing.
 4. **Promotion is earned.** A retrained model only reaches the `Production` stage
    if it beats the incumbent on a holdout metric. A worse model must never serve.
 5. **Type hints everywhere. Tests for every phase before moving on.**
@@ -35,6 +38,7 @@ effect engine). Here there is no theory to derive. The difficulty is all wiring.
 ## Tech stack
 
 - Storage: DuckDB + parquet (`data/`)
+- Data: synthetic generator (default, offline) | EIA open data API v2 (live)
 - Model: scikit-learn (`HistGradientBoostingRegressor`) — intentionally plain
 - Tracking + registry: MLflow (local file store under `mlruns/`)
 - Serving: FastAPI + Uvicorn
@@ -42,6 +46,7 @@ effect engine). Here there is no theory to derive. The difficulty is all wiring.
 - Monitoring: Evidently
 - CI: GitHub Actions
 - Config: Pydantic + YAML
+- Cloud target (Phase 8): Databricks Free Edition (perpetual, serverless, free)
 
 ## Directory map
 
@@ -99,6 +104,12 @@ hourly rows in a DuckDB table via upsert on the timestamp key. Support backfill
 over a date range.
 **Done when:** running ingest twice over the same range leaves row count unchanged.
 
+When you later flip `kind: eia`, the same upsert must hold up against *real-world*
+mess: paginated responses (EIA caps rows per request), missing hours, and — the
+interesting one — **late revisions**, where a previously-published hour comes back
+with a corrected value. Your upsert must overwrite on the timestamp key, not just
+skip-if-exists. That requirement is exactly why idempotency was the Phase 1 axiom.
+
 ### Phase 2 — Features + baseline + tracking
 Implement `features/build.py` (lag features, rolling means, hour/day/month,
 holiday flag) and `training/train.py` (train `HistGradientBoostingRegressor`,
@@ -128,9 +139,49 @@ a rolling window). Wire a Prefect flow that runs the drift check and triggers th
 Phase 5 retrain flow when drift crosses the configured threshold.
 **Done when:** injecting drifted data into the store visibly fires a retrain.
 
-### Phase 7 — Stretch
-Grafana dashboard over logged metrics; shadow-deploy a challenger model alongside
-Production and log a comparison. No done-criterion — this is dessert.
+### Phase 7 — Live evaluation & performance-over-time
+Real forecasting has **delayed actuals**: at time t you predict hours t+1…t+H, but
+those actuals only arrive later. So you can't score a live forecast immediately.
+Persist every prediction (target timestamp + model version + value), and when the
+actual for that timestamp lands, join the two and compute realized error. The
+rolling realized-error series — ideally plotted against EIA's own day-ahead
+forecast (`forecast_type: DF`) as a baseline — is your performance-over-time
+showcase. Note the gap this exposes: backtest error (what `train.py` reports on a
+holdout) and live error (on genuinely unseen future hours) routinely differ.
+Target property: a predictions table keyed by (target_ts, model_version) that
+joins to actuals to yield realized error. (You design the schema and the join.)
+**Done when:** you can show realized error accumulating over time vs. the baseline.
+
+### Phase 8 — Cloud deployment (Databricks Free Edition)
+Lift the working local system onto Databricks Free Edition (perpetual, free,
+serverless). The payoff is that the Phase 7 showcase becomes *always-on*: a
+scheduled Job runs ingest → score → evaluate → drift-check without your laptop
+being awake. The migration mostly proves why the stack is OSS: point MLflow at the
+managed tracking URI; the registry becomes Unity Catalog (`databricks-uc`); FastAPI
+serving becomes a Model Serving endpoint; Prefect flows become Jobs; DuckDB/parquet
+becomes Delta. Two genuine changes to design through, not copy: it's serverless-only
+(no cluster to size), and promotion moves from MLflow **stages** to Unity Catalog
+**aliases** (e.g. `@champion`) — so your `promote.py` gate logic survives but its
+mechanism updates. This track fits the fade ladder differently: properties and
+done-criteria still drive it, but "design the interface" becomes "design the
+deployment topology," and tests become smoke tests against deployed resources.
+**Done when:** a scheduled cloud Job keeps the live performance view current on its own.
+
+### Phase 9 — Experimentation & feature enrichment (ongoing, not a milestone)
+This is the point of having built everything above: improving the model is now a
+*safe, instrumented loop*, not a risky edit. The registry + earned-promotion gate +
+live evaluation mean you can try a new model or new features as a challenger, let
+the gate decide on merit, and watch live error — a worse idea simply never gets
+promoted. So this isn't a phase you "finish"; it's the steady state you operate in.
+What it covers: model bake-offs (swap in alternatives, compare honestly via the
+same tracked metric), and feature enrichment — notably **weather forecasts**, which
+carry their own lesson. At prediction time for hour t+h you only have a *forecast*
+of the weather for t+h, not the actual, so weather features must use forecasted
+values (and ideally train on the forecasts that were available historically), or
+you reintroduce leakage — the same "only information available at decision time"
+discipline as delayed actuals. A free, keyless source like Open-Meteo is a
+reasonable candidate when you get here.
+**No done-criterion — this is the machine doing its job.**
 
 ## How to run (these are the target entrypoints — they work once you build each phase)
 
