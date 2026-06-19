@@ -45,14 +45,25 @@ src/forecaster/
 
 ## Tech stack
 
-- **Storage:** DuckDB + parquet
+The system is built on a portable open-source stack, then lifted to a serverless
+cloud platform without rewriting the core logic — the same code runs locally and on
+Databricks.
+
+| Concern | Local (open-source) | Cloud (Databricks Free Edition) |
+| --- | --- | --- |
+| Storage | DuckDB + parquet | Delta |
+| Tracking + registry | MLflow (file store) | MLflow + Unity Catalog (`@champion` aliases) |
+| Serving | FastAPI + Uvicorn | Model Serving endpoint |
+| Orchestration | Prefect flows | Databricks Jobs / Workflows |
+| Monitoring | Evidently | runs in a Job (or Lakehouse Monitoring) |
+
 - **Data:** synthetic generator (default, offline) | EIA open-data API v2 (live)
-- **Model:** scikit-learn `HistGradientBoostingRegressor`
-- **Tracking + registry:** MLflow
-- **Serving:** FastAPI + Uvicorn
-- **Orchestration:** Prefect
-- **Monitoring:** Evidently
-- **Cloud target:** Databricks Free Edition (serverless Jobs, Unity Catalog, Delta)
+- **Model:** scikit-learn `HistGradientBoostingRegressor` — plain by design
+
+The local→cloud lift is a deliberate showcase: because the stack is OSS, migration
+is a matter of repointing infrastructure (MLflow tracking URI, registry, schedulers)
+rather than rebuilding — and the promotion gate logic survives intact, only its
+mechanism changes (MLflow stages → Unity Catalog aliases).
 
 ## The domain is swappable
 
