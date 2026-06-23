@@ -1,5 +1,5 @@
 [project]
-name = "forecast-service"
+name = "electricity-load-forecasting"
 version = "0.1.0"
 description = "MLOps-first hourly demand forecasting service. The model is a commodity; the system is the point."
 requires-python = ">=3.11"
