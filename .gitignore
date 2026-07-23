@@ -7,3 +7,5 @@ mlruns/
 .prefect/
 *.duckdb
 reference/
+.claude/
+.DS_Store
