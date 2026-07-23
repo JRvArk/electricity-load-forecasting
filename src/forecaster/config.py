@@ -3,6 +3,7 @@
 `config/config.yaml` is the single source of truth for anything domain-specific.
 No other module should hardcode dataset names, column names, or paths.
 """
+
 from __future__ import annotations
 
 from functools import lru_cache
@@ -45,9 +46,10 @@ class EntsoeCfg(BaseModel):
 
 class SourceCfg(BaseModel):
     kind: str
-    synthetic: SyntheticCfg
-    eia: EiaCfg
-    entsoe: EntsoeCfg
+    source_cfg: SyntheticCfg | EiaCfg | EntsoeCfg
+    # synthetic: SyntheticCfg
+    # eia: EiaCfg
+    # entsoe: EntsoeCfg
 
 
 class StorageCfg(BaseModel):
@@ -108,4 +110,7 @@ def load_config(path: str | Path | None = None) -> Config:
     cfg_path = Path(path) if path else _DEFAULT_CONFIG_PATH
     with cfg_path.open("r", encoding="utf-8") as fh:
         raw = yaml.safe_load(fh)
+    source = raw["source"]["kind"]
+    source_cfg = raw["source"][source]
+    raw["source"] = {"kind": source, "source_cfg": source_cfg}
     return Config(**raw)
