@@ -27,14 +27,15 @@ Hint: for the synthetic source, a deterministic series with daily + weekly
 seasonality plus noise is plenty. The modeling is not the point here.
 """
 
-from forecaster.config import SyntheticCfg, Config, load_config  # noqa: F401  — you'll need these
-import pandas as pd
 import argparse
-import logging
-import numpy as np
 import datetime
-import duckdb
+import logging
 
+import duckdb
+import numpy as np
+import pandas as pd
+
+from forecaster.config import Config, SyntheticCfg, load_config  # noqa: F401  — you'll need these
 from forecaster.ingestion.ingest_result import IngestResult
 
 logger = logging.getLogger(__name__)
@@ -98,17 +99,20 @@ def store_data(
     conn.execute(f"CREATE TABLE IF NOT EXISTS {table_name} AS SELECT * FROM incoming WHERE 1=0")
     # delete-then-insert overlapping keys = idempotent upsert
     conn.execute(
-        f"DELETE FROM {table_name} WHERE {timestamp_column_name} IN (SELECT {timestamp_column_name} FROM incoming)"
+        f"DELETE FROM {table_name} WHERE {timestamp_column_name} IN"
+        f"(SELECT {timestamp_column_name} FROM incoming)"
     )
     conn.execute(f"INSERT INTO {table_name} SELECT * FROM incoming")
 
 
 def ingest(cfg: Config, backfill_days: int) -> None:
     start_time_ingestion = datetime.datetime.now(datetime.timezone.utc)
+    logger.info(f"Starting ingestion for {backfill_days} days backfill at {start_time_ingestion}.")
     try:
         data_df = load_data(cfg, backfill_days)
         with duckdb.connect(cfg.storage.duckdb_path) as conn:
             store_data(conn, data_df, cfg.storage.raw_table, cfg.domain.timestamp_column)
+        logger.info(f"Ingested {len(data_df)} rows into {cfg.storage.raw_table}.")
     except Exception as e:
         logger.error(f"Error occurred during ingestion: {e}")
         return IngestResult(
@@ -122,6 +126,9 @@ def ingest(cfg: Config, backfill_days: int) -> None:
             data_end_time=None,
         )
 
+    logger.info(
+        f"Ingestion completed successfully at {datetime.datetime.now(datetime.timezone.utc)}."
+    )
     return IngestResult(
         source_cfg=cfg.source.source_cfg,
         backfill_days=backfill_days,

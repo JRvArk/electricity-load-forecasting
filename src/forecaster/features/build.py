@@ -25,7 +25,46 @@ makes the leakage/NaN properties trivial to test. Persisting to DuckDB is a
 separate concern.
 """
 
+import duckdb
+import pandas as pd
+
 from forecaster.config import Config, load_config  # noqa: F401
 
 # TODO(rung-3): design and implement.
 # Make this module runnable as:  python -m forecaster.features.build
+
+
+def retrieve_data(conn: duckdb.DuckDBPyConnection) -> pd.DataFrame:
+    pass
+
+
+def _compute_lag(data: pd.DataFrame, lag: int) -> pd.DataFrame:
+    pass
+
+
+def _compute_rolling_window(data: pd.DataFrame, window: int) -> pd.DataFrame:
+    pass
+
+
+def _compute_holiday_feature(data: pd.DataFrame, country: str) -> pd.DataFrame:
+    pass
+
+
+def build_features(data: pd.DataFrame, config: Config) -> pd.DataFrame:
+    pass
+
+
+def persist_features(conn: duckdb.DuckDBPyConnection, df: pd.DataFrame) -> None:
+    pass
+
+
+def main() -> None:
+    config = load_config()
+    with duckdb.connect(database=config.storage.duckdb_path) as conn:
+        raw_data = retrieve_data(conn)
+        features = build_features(raw_data, config)
+        persist_features(conn, features)
+
+
+if __name__ == "__main__":
+    main()

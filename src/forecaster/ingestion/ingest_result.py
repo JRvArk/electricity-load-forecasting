@@ -1,7 +1,8 @@
-from pydantic import BaseModel
 import datetime
 
-from forecaster.config import SyntheticCfg, EiaCfg, EntsoeCfg
+from pydantic import BaseModel
+
+from forecaster.config import EiaCfg, EntsoeCfg, SyntheticCfg
 
 
 class IngestResult(BaseModel):

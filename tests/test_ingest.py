@@ -1,14 +1,13 @@
+from pathlib import Path
+
+import duckdb
+import pandas as pd
+import pytest
 import yaml
 
-from forecaster.ingestion.ingest import ingest, store_data
-from forecaster.ingestion.ingest import _create_synthetic_data
-from forecaster.config import Config, _DEFAULT_CONFIG_PATH, SyntheticCfg
+from forecaster.config import _DEFAULT_CONFIG_PATH, Config, SyntheticCfg
+from forecaster.ingestion.ingest import _create_synthetic_data, ingest, store_data
 from forecaster.ingestion.ingest_result import IngestResult
-
-import pytest
-import pandas as pd
-import duckdb
-from pathlib import Path
 
 
 @pytest.fixture(params=[1, 7, 90])
