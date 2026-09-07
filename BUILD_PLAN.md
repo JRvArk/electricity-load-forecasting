@@ -2,6 +2,33 @@
 
 Personal roadmap and methodology notes for this project.
 
+## Status — un-parked, finishing January 2027
+
+Parked 2026-09-01 alongside a causal-inference engine, on the grounds that neither was on the
+critical path. **Un-parked 2026-09-07**, for this repo only — the sibling stays archived.
+
+The reason it came back: the career target is now **quant research in two employer clusters**,
+prop firms and **energy trading houses**, and this is the engineering artifact for the second.
+It is also the cheapest remaining artifact, because most of it is already built.
+
+- **Slot:** **January 2027** — four weeks with no university course in them, between semester-1
+  finals in mid-December and semester 2 starting in February. The one genuinely open block in
+  the year.
+- **Budget:** **70–80 hours, time-boxed.**
+- **Scope:** **Phase 3 close-out through Phase 7.** Phase 3 is still open, so that is real work
+  rather than a formality.
+- **Venue:** a rented x86-64 Linux VPS, not the laptop — see *Where this runs*, below.
+- **After January it is done.** It goes on the CV and gets written up; it is not maintained as a
+  rolling project. That is what cutting Phase 9 is for.
+
+### The time box, fixed before starting
+
+70–80 hours across the remaining phases, set **in advance**. The number is a judgement, not a
+researched estimate — its entire value is that it was fixed before the work began.
+
+**Stop rule:** at the box limit, ship what is done and record the rest as the finding.
+Under-delivering against a stated target is a result. An unbounded finish is not.
+
 ## Approach
 
 Each phase owns a single done-criterion. I stop when it's met — that's a clean
@@ -75,7 +102,14 @@ Target: a predictions table keyed by (target_ts, model_version) that joins to
 actuals to yield realized error.
 **Done when:** I can show realized error accumulating over time vs. the baseline.
 
-### Phase 8 — Cloud deployment (Databricks Free Edition)
+### Phase 8 — Cloud deployment (Databricks Free Edition) — **deferred, not cut**
+
+> **Deferred 2026-09-07, on scope rather than merit.** The argument for it is real: the platform
+> is free and perpetual, the phase has a genuine done-criterion, and it would make the Phase 7
+> performance view **always-on without a laptop awake** — which is presentation value, not
+> platform engineering. It is out of January because it re-platforms a system that already
+> works, and 70–80 hours does not stretch to it. Revisit after January as a *presentation*
+> decision. Do not start it; do not delete it.
 Lift the working local system onto Databricks Free Edition (perpetual, free,
 serverless). The Phase 7 showcase becomes always-on: a scheduled Job runs
 ingest → score → evaluate → drift-check without my laptop being awake.
@@ -92,7 +126,13 @@ It's serverless-only (no cluster to size), so that's a real design constraint to
 work through rather than just copy.
 **Done when:** a scheduled cloud Job keeps the live performance view current on its own.
 
-### Phase 9 — Experimentation & feature enrichment (ongoing)
+### Phase 9 — Experimentation & feature enrichment — **cut 2026-09-07**
+
+> **Cut, and this is the point of the cut.** The heading used to read *(ongoing)*. A phase with
+> no terminal state means the project has no terminal state, and this project needs one: it goes
+> on a CV in spring 2027 and gets pointed at in applications. What follows is not a phase of
+> building the system — it is what the finished system is *for*, kept here because that is worth
+> knowing and worth writing up. Nothing below is January work.
 This is the payoff of building everything above: improving the model is now a safe,
 instrumented loop. I can run a new model or new features as a challenger, let the
 promotion gate decide on merit, and watch live error. A worse idea simply never
