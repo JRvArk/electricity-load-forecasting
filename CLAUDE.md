@@ -57,7 +57,7 @@ phase implementations — that is the entire point of the repo.
 - Model: scikit-learn (`HistGradientBoostingRegressor`) — intentionally plain
 - Tracking + registry: MLflow (local file store under `mlruns/`)
 - Serving: FastAPI + Uvicorn
-- Orchestration: Prefect — **open decision**, Prefect vs systemd timers (`BUILD_PLAN.md` Phase 5)
+- Orchestration: **systemd timers** (decided 2026-09-07 — Prefect dropped; reasoning in `BUILD_PLAN.md` Phase 5)
 - Monitoring: Evidently
 - CI: GitHub Actions
 - Config: Pydantic + YAML
@@ -76,7 +76,7 @@ src/forecaster/
   registry/promote.py      # human implements: register + earned-promotion gate
   serving/app.py           # human implements: FastAPI serving the Production model
   monitoring/drift.py      # human implements: drift signal
-  orchestration/flows.py   # human implements: Prefect flows tying it together
+  orchestration/flows.py   # human implements: plain-Python pipelines, run by systemd timers
 tests/                     # human writes tests here, BEFORE implementing
 reference/                 # worked solution — exists locally, gitignored
 data/                      # parquet + duckdb (gitignored except .gitkeep)

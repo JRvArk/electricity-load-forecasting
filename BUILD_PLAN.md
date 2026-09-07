@@ -125,22 +125,52 @@ Flesh out `Dockerfile` and `docker-compose.yml` (service + mlflow). Make
 **Done when:** `docker compose up` yields a working `/predict` from a clean clone.
 
 ### Phase 5 — Orchestration
-Implement `orchestration/flows.py`: a flow that runs ingest → features → train → promote on a
-schedule. Promotion uses the Phase 3 gate.
+Implement `orchestration/flows.py`: a plain-Python pipeline that runs ingest → features → train →
+promote, invoked on a schedule by a systemd timer. ("Flow" here is generic, not Prefect vocabulary —
+the filename stays for continuity.) Promotion uses the Phase 3 gate.
 **Done when:** a deliberately bad retrain cannot reach `Production`.
 
-> **[OPEN — decide before implementing]** *Prefect or systemd timers?* The stack has always said
-> Prefect; the VPS decision points the other way and this is not settled.
-> **systemd:** what production Linux and research clusters actually run, no dependencies, and it
-> hands Phase 6 its monitoring surface for free via `journalctl`. **Prefect:** retries,
-> observability, a UI, and a recognised tool name on a CV.
-> Weak lean to systemd, on the grounds that specific orchestration tools are interchangeable and
-> the transferable skill is the scheduler underneath. **If systemd wins, Phase 6 needs
-> rethinking too** — its retrain trigger currently assumes one flow can call another.
+> **[DECIDED 2026-09-07 — systemd timers.]** Prefect is dropped from the stack.
+>
+> **Why, in order of weight.** *Linux is the point of the venue*, and systemd is where it gets
+> learned: unit files, `OnCalendar`, `systemctl list-timers`, `journalctl -u`, exit codes,
+> `OnFailure=` chaining — plus the two Phase 6 drills fall straight out of the unit file
+> (`MemoryMax=` is the OOM drill, `User=` plus ownership is the permissions drill). And the single
+> most instructive Linux lesson available here only exists under systemd: **it works in your shell
+> and fails under the timer** — different `$PATH`, no shell profile, no interactive environment.
+>
+> *Prefect's retries work against Phase 6.* Its headline feature is making transient failures
+> invisible; Phase 6's acceptance test is breaking things deliberately and diagnosing from logs
+> before touching code. You would have to switch off the thing you were paying for.
+>
+> *You end up on systemd either way* — a self-hosted Prefect worker needs a unit to keep it alive
+> across reboots. So the real comparison was *Prefect and systemd* against *systemd*.
+>
+> *Both systemd modes get covered anyway*: `Type=oneshot` + timer for the pipeline here, and a
+> long-running `Restart=always` service for the Phase 3 FastAPI app.
+>
+> **What is given up, honestly.** Declarative retries and backoff — see the requirement below,
+> which is where they go instead. And a run-history UI, replaced by something better in the same
+> requirement. Neither loss is a Linux consideration.
+
+**Requirements this creates.** All three are scheduler-agnostic; none of them come free now.
+
+1. **A run-history table in DuckDB** — `(run_id, flow, started_at, ended_at, status, model_version,
+   promoted, reject_reason, drift_share)`. It is needed regardless of scheduler because Phase 6's
+   loop-termination state has to live somewhere, and it is a better artifact than an orchestrator
+   screenshot: queryable, version-controllable, and yours. It also feeds the `GET /status`
+   endpoint and the Phase 7 write-up.
+2. **Retry with backoff around the external API call**, in Python, in the ingest step. systemd will
+   not do this for you, and ingest talks to a network API. Roughly twenty lines, and error handling
+   you would want anyway.
+3. **Keep the pipeline as plain functions and the scheduler thin.** `run_retrain()` and
+   `run_monitor()` as ordinary callables invoked by `python -m forecaster.orchestration.…`. The
+   unit file should be fifteen lines that call one thing. That keeps the decision cheap to reverse:
+   an orchestrator, if one is ever wanted, becomes a wrapper rather than a rewrite.
 
 ### Phase 6 — Monitoring + auto-retrain
 Implement `monitoring/drift.py` with Evidently (data drift + prediction drift on
-a rolling window). Wire a Prefect flow that runs the drift check and triggers the
+a rolling window). Wire a monitor entry point that runs the drift check and triggers the
 Phase 5 retrain flow when drift crosses the configured threshold.
 **Done when:** injecting drifted data into the store visibly fires a retrain — end to end, not only
 a unit fixture — **and a persistently drifted store does not retrain forever** — **and** the four
@@ -168,6 +198,8 @@ permissions problem — in that order, before reading any code.
 > Pick one and write it down before implementing: a **cooldown** (no retrain within N hours of a
 > rejected one), a **drift acknowledgement** (the firing state is recorded and not re-triggered
 > until it clears), or **escalation** (after k rejected retrains, stop retrying and raise an alert).
+> All three read their state from the Phase 5 run-history table, which is why that table is a
+> requirement rather than a nicety.
 > Escalation is the one worth having in an interview: a challenger that repeatedly cannot beat the
 > incumbent on drifted data is telling you something a retrain will not fix.
 
@@ -192,6 +224,13 @@ actuals to yield realized error.
 **Done when:** I can show realized error accumulating over time vs. the seasonal-naive baseline, on
 the synthetic source, offline.
 
+**How this gets shared, since there is no orchestrator UI.** A `GET /status` endpoint on the Phase 3
+service — current Production version, last N runs from the run-history table, drift state, realized
+error. If the VPS is reachable that is a **live URL** for the write-up, which beats a screenshot of
+anything. Read-only, and echo nothing from the environment. The stronger artifact is still the
+numbers in prose: *"over N nightly runs the gate promoted x challengers and rejected y — here are
+the rejections I think were wrong."*
+
 ### Phase 8 — Cloud deployment (Databricks Free Edition) — **deferred, not cut**
 
 > **Deferred 2026-09-07, on scope rather than merit.** The argument for it is real: the platform
@@ -209,7 +248,7 @@ What changes vs. the local stack:
 - Registry → Unity Catalog (`databricks-uc`), promotion via aliases (e.g. `@champion`)
   instead of MLflow stages — gate logic survives, only the mechanism updates
 - FastAPI serving → Model Serving endpoint
-- Prefect flows → Databricks Jobs / Workflows
+- systemd timers → Databricks Jobs / Workflows
 - DuckDB/parquet → Delta
 
 It's serverless-only (no cluster to size), so that's a real design constraint to

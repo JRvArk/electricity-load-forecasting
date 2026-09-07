@@ -33,7 +33,7 @@ so it is clear what runs today and what does not.
   from the registry, with a reload endpoint. Changing the production version changes
   predictions with no code change and no redeploy.
 - **Orchestration** *(Phase 5, January 2027)* — scheduled runs of ingest → features → train →
-  promote. Prefect or systemd timers is an open decision; see `BUILD_PLAN.md` Phase 5.
+  promote, run by systemd timers on the host.
 - **Drift monitoring + auto-retrain** *(Phase 6, January 2027)* — Evidently watches data and prediction drift
   on a rolling window and fires a retrain when drift crosses a configured threshold.
 - **Live evaluation** *(Phase 7, January 2027)* — every prediction is persisted and joined to actuals as they
@@ -51,7 +51,7 @@ src/forecaster/
   registry/promote.py      # register + earned-promotion gate
   serving/app.py           # FastAPI serving the Production model
   monitoring/drift.py      # drift signal -> retrain trigger
-  orchestration/flows.py   # Prefect flows tying it together
+  orchestration/flows.py   # plain-Python pipelines, scheduled by systemd
 ```
 
 ## Tech stack
@@ -65,7 +65,7 @@ Databricks.
 | Storage | DuckDB + parquet | Delta |
 | Tracking + registry | MLflow (file store) | MLflow + Unity Catalog (`@champion` aliases) |
 | Serving | FastAPI + Uvicorn | Model Serving endpoint |
-| Orchestration | Prefect flows | Databricks Jobs / Workflows |
+| Orchestration | systemd timers | Databricks Jobs / Workflows |
 | Monitoring | Evidently | runs in a Job (or Lakehouse Monitoring) |
 
 - **Data:** synthetic generator (default, offline) | EIA open-data API v2 (live)

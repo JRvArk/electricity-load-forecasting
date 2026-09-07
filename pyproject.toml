@@ -15,7 +15,6 @@ dependencies = [
     "pydantic>=2.6",
     "pyyaml>=6.0",
     "holidays>=0.45",
-    "prefect>=2.18",
     "evidently>=0.4",
 ]
 
