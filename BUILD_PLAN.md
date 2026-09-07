@@ -29,6 +29,32 @@ researched estimate — its entire value is that it was fixed before the work be
 **Stop rule:** at the box limit, ship what is done and record the rest as the finding.
 Under-delivering against a stated target is a result. An unbounded finish is not.
 
+## Where this runs — a VPS, and Linux as a by-product
+
+From day one of January the project runs on a rented **x86-64 Linux VPS** (~€4/month), not the
+laptop. One evening to provision: create the instance, add an SSH key, disable root and password
+login, enable a firewall, install `tmux`.
+
+This is a **venue decision, not a new commitment.** Linux fluency is wanted and a separate
+"learn Linux" thread has been deliberately refused, because it would compete with the
+mathematics. It does not need to be a thread — the remaining phases *are* the curriculum:
+
+- **Phase 4 containerisation** meets the **ARM64 trap** immediately: the laptop is Apple
+  Silicon, the VPS is x86-64, so an image built locally will not run there.
+  `docker buildx build --platform linux/amd64` is the fix, and understanding *why* is the
+  lesson.
+- **Phase 5 orchestration** is a scheduler on a real machine (see the open decision in Phase 5).
+- **Phase 6 monitoring** is reading logs on a box that is not in front of you.
+
+**Yield rule.** If Linux starts becoming the project rather than the venue, fall back to local
+Docker and finish the pipeline. The deliverable is the service; Linux is the by-product.
+
+**One more job for the same box.** A companion project needs `perf` profiling in summer 2027,
+and Apple Silicon does not expose hardware performance counters. This VPS is the obvious
+candidate — but cheap VPSs are KVM guests, where counters are often not exposed either. Run
+`perf stat -e cycles,instructions,cache-misses` on it **in January**, six months before it is
+needed. Ten minutes then, or an expensive surprise in July.
+
 ## Approach
 
 Each phase owns a single done-criterion. I stop when it's met — that's a clean
@@ -80,15 +106,39 @@ Flesh out `Dockerfile` and `docker-compose.yml` (service + mlflow). Make
 **Done when:** `docker compose up` yields a working `/predict` from a clean clone.
 
 ### Phase 5 — Orchestration
-Implement `orchestration/flows.py`: a Prefect flow that runs ingest → features
-→ train → promote on a schedule. Promotion uses the Phase 3 gate.
+Implement `orchestration/flows.py`: a flow that runs ingest → features → train → promote on a
+schedule. Promotion uses the Phase 3 gate.
 **Done when:** a deliberately bad retrain cannot reach `Production`.
+
+> **[OPEN — decide before implementing]** *Prefect or systemd timers?* The stack has always said
+> Prefect; the VPS decision points the other way and this is not settled.
+> **systemd:** what production Linux and research clusters actually run, no dependencies, and it
+> hands Phase 6 its monitoring surface for free via `journalctl`. **Prefect:** retries,
+> observability, a UI, and a recognised tool name on a CV.
+> Weak lean to systemd, on the grounds that specific orchestration tools are interchangeable and
+> the transferable skill is the scheduler underneath. **If systemd wins, Phase 6 needs
+> rethinking too** — its retrain trigger currently assumes one flow can call another.
 
 ### Phase 6 — Monitoring + auto-retrain
 Implement `monitoring/drift.py` with Evidently (data drift + prediction drift on
 a rolling window). Wire a Prefect flow that runs the drift check and triggers the
 Phase 5 retrain flow when drift crosses the configured threshold.
-**Done when:** injecting drifted data into the store visibly fires a retrain.
+**Done when:** injecting drifted data into the store visibly fires a retrain — **and** the four
+failure drills below have each been diagnosed from logs alone.
+
+**Deliberate failure is the acceptance test, not an extra.** Break it on purpose, then find the
+cause *from logs before touching code*. This is the part almost nobody can discuss in an
+interview, and it is nearly free once the thing runs on a real box:
+
+| Drill | What it teaches |
+|---|---|
+| Fill the disk (`fallocate`) and watch the job fail | `df -h`, `du -sh /* \| sort -h` — the cause of a large share of mystery failures |
+| Revoke read permission on the data directory | Reading a traceback back to a permissions cause |
+| Cap container memory until the job is OOM-killed | The evidence is in `dmesg` / `journalctl -k`, not in the application log |
+| Point the schedule at a script that does not exist | What the scheduler's own status output actually tells you |
+
+**The diagnostic order worth memorising:** is the disk full, was it OOM-killed, is it a
+permissions problem — in that order, before reading any code.
 
 ### Phase 7 — Live evaluation & performance-over-time
 Real forecasting has delayed actuals: at time t I predict hours t+1…t+H, but
