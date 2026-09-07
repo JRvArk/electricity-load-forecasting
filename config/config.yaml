@@ -38,6 +38,10 @@ storage:
   feature_table: features
 
 features:
+  # OPEN (decision A, BUILD_PLAN.md): these are only valid if lags are measured
+  # from the FORECAST ORIGIN. Read against the target timestamp, lags 1/2/3 are
+  # leakage at any horizon beyond 3h — and the EIA baseline is a day-ahead
+  # forecast. Settle before implementing features/build.py.
   lags: [1, 2, 3, 24, 48, 168]       # hours
   rolling_windows: [24, 168]         # hours
   calendar: true

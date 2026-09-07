@@ -111,6 +111,29 @@ revisions, where a previously-published hour comes back with a corrected value.
 The upsert must overwrite on the timestamp key, not just skip-if-exists.
 
 ### Phase 2 — Features + baseline + tracking
+
+> **[OPEN — decision A, and it blocks this phase.]** *What is the forecast horizon, and are lags
+> measured from the target timestamp or the forecast origin?* Neither is defined anywhere: there is
+> no `horizon` key in `config.yaml`, and `test_horizon_hours` is the holdout length, not a horizon.
+>
+> It matters concretely. `build.py`'s no-leakage property reads *"every feature at time $t$ uses
+> only information available strictly before $t$"*, which is correct for a **one-step** model and
+> wrong otherwise. Phase 7 says *"at time $t$ I predict hours $t+1 \dots t+H$"*, and the EIA
+> baseline is `DF` — a **day-ahead** forecast, so $H \approx 24$. At $H = 24$, a lag-1 feature on
+> the target timestamp needs the value at $t+23$, which does not exist when you predict. **`lags:
+> [1, 2, 3]` would be leakage**, and silently: the backtest would look excellent and live error
+> would not match it. Phase 7 exists to surface exactly that gap, which is a slow and expensive way
+> to learn it.
+>
+> **Recommended resolution — it is a definition, not a config change.** Measure lags from the
+> **forecast origin**: lag-1 means "the most recent observed value at forecast time", available at
+> every horizon. The existing list `[1, 2, 3, 24, 48, 168]` then stays valid as written, and the
+> horizon becomes an explicit input — a `horizon_hours` key, with the target reshaped so each row
+> is (origin, horizon, target). Recommend **$H = 24$**, matching the day-ahead baseline and the
+> README's "short-horizon" claim.
+>
+> Restate `build.py`'s leakage property once this is settled: *available at the forecast origin*,
+> not *strictly before the target timestamp*. Those differ for every $H > 1$.
 Implement `features/build.py` (lag features, rolling means, hour/day/month,
 holiday flag) and `training/train.py` (train `HistGradientBoostingRegressor`,
 log params + MAE/RMSE + the feature config hash to MLflow).
