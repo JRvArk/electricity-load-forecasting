@@ -8,24 +8,35 @@ trains and tracks models, gates promotion on measured performance, serves the
 current production model over an API, and watches itself for drift to trigger
 retraining.
 
+## Status
+
+Ingestion, feature building and tracked training are in place. **Phase 3 — registry and
+serving — is open.** Phases 4–7 (containerise + CI, orchestration, drift monitoring with
+auto-retrain, live evaluation) are scheduled as one time-boxed block in **January 2027**, run on
+a Linux VPS rather than a laptop. Phase 8 (cloud) is deferred; Phase 9 is cut, so the project
+has a finish line. Detail in [BUILD_PLAN.md](BUILD_PLAN.md).
+
+The list below is the system **as designed**, with the phase that builds each capability named —
+so it is clear what runs today and what does not.
+
 ## What it does
 
-- **Idempotent ingestion** — hourly observations land in DuckDB via upsert on the
+- **Idempotent ingestion** *(Phase 1, in place)* — hourly observations land in DuckDB via upsert on the
   timestamp key. Re-running a backfill never duplicates or corrupts rows, and late
   upstream revisions overwrite cleanly.
-- **Reproducible training** — every model is produced by a tracked MLflow run with
+- **Reproducible training** *(Phase 2, in place)* — every model is produced by a tracked MLflow run with
   logged params, metrics, and the exact feature-config hash. No model exists
   outside the tracking store.
-- **Earned promotion** — a retrained model only reaches `Production` if it beats the
+- **Earned promotion** *(Phase 3, open)* — a retrained model only reaches `Production` if it beats the
   incumbent on a holdout metric. A worse model never serves.
-- **Live serving** — a FastAPI service loads whichever version is at `Production`
+- **Live serving** *(Phase 3, open)* — a FastAPI service loads whichever version is at `Production`
   from the registry, with a reload endpoint. Changing the production version changes
   predictions with no code change and no redeploy.
-- **Orchestration** — Prefect flows run ingest → features → train → promote on a
-  schedule.
-- **Drift monitoring + auto-retrain** — Evidently watches data and prediction drift
+- **Orchestration** *(Phase 5, January 2027)* — scheduled runs of ingest → features → train →
+  promote. Prefect or systemd timers is an open decision; see `BUILD_PLAN.md` Phase 5.
+- **Drift monitoring + auto-retrain** *(Phase 6, January 2027)* — Evidently watches data and prediction drift
   on a rolling window and fires a retrain when drift crosses a configured threshold.
-- **Live evaluation** — every prediction is persisted and joined to actuals as they
+- **Live evaluation** *(Phase 7, January 2027)* — every prediction is persisted and joined to actuals as they
   arrive, producing a realized-error series tracked over time against a day-ahead
   baseline.
 
@@ -49,7 +60,7 @@ The system is built on a portable open-source stack, then lifted to a serverless
 cloud platform without rewriting the core logic — the same code runs locally and on
 Databricks.
 
-| Concern | Local (open-source) | Cloud (Databricks Free Edition) |
+| Concern | Local (open-source) | Cloud (Databricks Free Edition) — **Phase 8, deferred** |
 | --- | --- | --- |
 | Storage | DuckDB + parquet | Delta |
 | Tracking + registry | MLflow (file store) | MLflow + Unity Catalog (`@champion` aliases) |
@@ -60,10 +71,11 @@ Databricks.
 - **Data:** synthetic generator (default, offline) | EIA open-data API v2 (live)
 - **Model:** scikit-learn `HistGradientBoostingRegressor` — plain by design
 
-The local→cloud lift is a deliberate showcase: because the stack is OSS, migration
-is a matter of repointing infrastructure (MLflow tracking URI, registry, schedulers)
-rather than rebuilding — and the promotion gate logic survives intact, only its
-mechanism changes (MLflow stages → Unity Catalog aliases).
+The local→cloud lift is a **planned** showcase rather than a built one — Phase 8 is deferred
+past January (see `BUILD_PLAN.md`). The design intent stands: because the stack is OSS,
+migration is a matter of repointing infrastructure (MLflow tracking URI, registry, schedulers)
+rather than rebuilding, and the promotion-gate logic survives intact with only its mechanism
+changing (MLflow stages → Unity Catalog aliases).
 
 ## The domain is swappable
 

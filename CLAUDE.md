@@ -3,6 +3,18 @@
 Instructions for Claude Code. Read this fully before touching anything.
 The human-facing learning guide and phase roadmap live in `BUILD_PLAN.md`.
 
+## Status — read this before planning anything
+
+Parked 2026-09-01, **un-parked 2026-09-07**. Ingestion, features and tracked training are in
+place; **Phase 3 (registry + serving) is open**. Phases 4–7 are a single time-boxed block in
+**January 2027** — 70–80 hours, run on an x86-64 Linux VPS rather than the laptop. **Phase 9 is
+cut** (it had no terminal state and this project needs one); **Phase 8 is deferred**, not
+dismissed. Reasoning and the stop rule are in `BUILD_PLAN.md`.
+
+Two consequences for you. **Do not restore Phase 9 or fold it into 4–7**, and do not start
+Phase 8. And **do not add a Linux track, reading list or curriculum** — the phases are the
+curriculum, and a separate study thread has been explicitly refused.
+
 ## What this project is
 
 A production ML service for short-horizon **hourly demand forecasting** (anchor
@@ -45,12 +57,12 @@ phase implementations — that is the entire point of the repo.
 - Model: scikit-learn (`HistGradientBoostingRegressor`) — intentionally plain
 - Tracking + registry: MLflow (local file store under `mlruns/`)
 - Serving: FastAPI + Uvicorn
-- Orchestration: Prefect
+- Orchestration: Prefect — **open decision**, Prefect vs systemd timers (`BUILD_PLAN.md` Phase 5)
 - Monitoring: Evidently
 - CI: GitHub Actions
 - Config: Pydantic + YAML
 - Dependencies: uv (`uv sync --extra dev` to install)
-- Cloud target (Phase 8): Databricks Free Edition (perpetual, serverless, free)
+- Cloud target (Phase 8, **deferred**): Databricks Free Edition (perpetual, serverless, free)
 
 ## Directory map
 
