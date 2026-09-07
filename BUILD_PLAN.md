@@ -100,6 +100,17 @@ Implement `registry/promote.py` (register the run's model) and `serving/app.py`
 **Done when:** changing which version is `Production` changes predictions with no
 code change and no redeploy.
 
+> **The gate must compare on the same holdout, and this is easy to get wrong.**
+> `training.test_horizon_hours: 168` holds out the last week. The challenger is scored on the last
+> week of *today's* data; the incumbent's stored metric was computed on the last week of data as it
+> stood *when it was trained*. Those are different evaluation sets, so comparing the two stored
+> numbers is not a comparison — a challenger can win because its week happened to be calmer.
+>
+> **So the gate re-scores the incumbent on the challenger's holdout** and compares both on that one
+> set. Comparing stored metrics is the intuitive implementation and it is wrong. Make it an explicit
+> test: one model, two holdouts of differing difficulty, must not be judged better on the easier
+> one.
+
 ### Phase 4 — Containerize + CI
 Flesh out `Dockerfile` and `docker-compose.yml` (service + mlflow). Make
 `.github/workflows/ci.yml` run lint + pytest and build the image.
@@ -123,7 +134,8 @@ schedule. Promotion uses the Phase 3 gate.
 Implement `monitoring/drift.py` with Evidently (data drift + prediction drift on
 a rolling window). Wire a Prefect flow that runs the drift check and triggers the
 Phase 5 retrain flow when drift crosses the configured threshold.
-**Done when:** injecting drifted data into the store visibly fires a retrain — **and** the four
+**Done when:** injecting drifted data into the store visibly fires a retrain — end to end, not only
+a unit fixture — **and a persistently drifted store does not retrain forever** — **and** the four
 failure drills below have each been diagnosed from logs alone.
 
 **Deliberate failure is the acceptance test, not an extra.** Break it on purpose, then find the
@@ -139,6 +151,17 @@ interview, and it is nearly free once the thing runs on a real box:
 
 **The diagnostic order worth memorising:** is the disk full, was it OOM-killed, is it a
 permissions problem — in that order, before reading any code.
+
+> **The retrain loop has no exit as specified.** Drift fires → retrain → the challenger loses to the
+> incumbent on the shared holdout → the gate correctly rejects it → Production is unchanged → drift
+> is still there next run → retrain again. Nothing in the design breaks that cycle, and the gate
+> doing its job is exactly what sustains it.
+>
+> Pick one and write it down before implementing: a **cooldown** (no retrain within N hours of a
+> rejected one), a **drift acknowledgement** (the firing state is recorded and not re-triggered
+> until it clears), or **escalation** (after k rejected retrains, stop retrying and raise an alert).
+> Escalation is the one worth having in an interview: a challenger that repeatedly cannot beat the
+> incumbent on drifted data is telling you something a retrain will not fix.
 
 ### Phase 7 — Live evaluation & performance-over-time
 Real forecasting has delayed actuals: at time t I predict hours t+1…t+H, but

@@ -9,6 +9,11 @@ Target properties (write tests for these first)
       current incumbent on the configured primary metric (lower is better).
     - Cold start: with no incumbent, the first acceptable model is promoted.
     - A worse model never displaces a better incumbent.
+    - Same-holdout comparison: the incumbent is RE-SCORED on the challenger's
+      holdout before comparing. Comparing stored metrics from different training
+      runs compares different evaluation sets, and a challenger can then win by
+      drawing an easier week. Test it: one model, two holdouts of differing
+      difficulty, must not be judged better on the easier one.
 
 Done criterion
     Changing which version is Production changes served predictions with no code

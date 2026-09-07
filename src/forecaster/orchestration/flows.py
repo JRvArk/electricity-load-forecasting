@@ -9,6 +9,11 @@ Target properties (write tests / checks for these first)
     - The retrain flow reuses the Phase 3 promotion gate, so a worse model can
       never reach Production through orchestration either.
     - The monitor flow only triggers a retrain when the drift signal says so.
+    - A persistently drifted store does not retrain forever. Drift fires, the
+      retrain loses to the incumbent, the gate rejects it, drift is still there
+      next run — the cycle is sustained by the gate working correctly. Pick a
+      cooldown, a drift acknowledgement, or escalation after k rejections, and
+      test that the loop terminates.
     - Flows are idempotent at the step level (they lean on the Phase 1 upsert and
       the registry, not ad-hoc state).
 
