@@ -13,8 +13,8 @@ retraining.
 **Phase 1 (ingestion) is implemented on the synthetic source**; the EIA path is still a stub.
 **Phase 2 (features, training) is in progress** — tests written, implementation pending.
 **Phase 3 (registry, serving) is open.** Phases 4–7 (containerise + CI, orchestration, drift monitoring with
-auto-retrain, live evaluation) are scheduled as one time-boxed block in **January 2027**, run on
-a Linux VPS rather than a laptop. Phase 8 (cloud) is deferred; Phase 9 is cut, so the project
+auto-retrain, live evaluation) are being finished **September–December 2026**, time-boxed at 70–80
+hours, run on a Linux VPS rather than a laptop. Phase 8 (cloud) is deferred; Phase 9 is cut, so the project
 has a finish line. Detail in [BUILD_PLAN.md](BUILD_PLAN.md).
 
 The list below is the system **as designed**, with the phase that builds each capability named —
@@ -33,11 +33,11 @@ so it is clear what runs today and what does not.
 - **Live serving** *(Phase 3, open)* — a FastAPI service loads whichever version is at `Production`
   from the registry, with a reload endpoint. Changing the production version changes
   predictions with no code change and no redeploy.
-- **Orchestration** *(Phase 5, January 2027)* — scheduled runs of ingest → features → train →
+- **Orchestration** *(Phase 5, in progress)* — scheduled runs of ingest → features → train →
   promote, run by systemd timers on the host.
-- **Drift monitoring + auto-retrain** *(Phase 6, January 2027)* — Evidently watches data and prediction drift
+- **Drift monitoring + auto-retrain** *(Phase 6, in progress)* — Evidently watches data and prediction drift
   on a rolling window and fires a retrain when drift crosses a configured threshold.
-- **Live evaluation** *(Phase 7, January 2027)* — every prediction is persisted and joined to actuals as they
+- **Live evaluation** *(Phase 7, in progress)* — every prediction is persisted and joined to actuals as they
   arrive, producing a realized-error series tracked over time against a day-ahead
   baseline.
 

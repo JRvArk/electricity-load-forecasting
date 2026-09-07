@@ -11,14 +11,22 @@ The reason it came back: the career target is now **quant research in two employ
 prop firms and **energy trading houses**, and this is the engineering artifact for the second.
 It is also the cheapest remaining artifact, because most of it is already built.
 
-- **Slot:** **January 2027** — four weeks with no university course in them, between semester-1
-  finals in mid-December and semester 2 starting in February. The one genuinely open block in
-  the year.
-- **Budget:** **70–80 hours, time-boxed.**
+- **Slot:** **September–December 2026**, at 6–12 hrs/wk alongside semester 1 *(moved from January
+  on 2026-09-07)*. This project holds the term-time project slot because its remaining work is
+  implementation against fixed interfaces, which survives being picked up and put down in six-hour
+  weeks. The vol-surface engine takes the concentrated January block instead — its Phase 1 is
+  exploratory analysis that wants sustained attention.
+- **Budget:** **70–80 hours, time-boxed** — which is 7–13 weeks at 6–12 hrs/wk, so it fits the
+  term with margin.
+- **Deadline, and it is real.** The first internship applications may go out in **December 2026**.
+  This is the artifact they would carry: it is already on the CV, so it is the repo a reader
+  clicks, and a finished running system reads very differently from a half-built one. Its write-up
+  joins the VRP and Greenchoice notes in the December post-finals window.
 - **Scope:** **Phase 3 close-out through Phase 7.** Phase 3 is still open, so that is real work
   rather than a formality.
-- **Venue:** a rented x86-64 Linux VPS, not the laptop — see *Where this runs*, below.
-- **After January it is done.** It goes on the CV and gets written up; it is not maintained as a
+- **Venue:** a rented x86-64 Linux VPS, not the laptop — provisioned **in September**, day one.
+  See *Where this runs*, below.
+- **After December it is done.** It goes on the CV and gets written up; it is not maintained as a
   rolling project. That is what cutting Phase 9 is for.
 
 ### The time box, fixed before starting
@@ -27,7 +35,7 @@ It is also the cheapest remaining artifact, because most of it is already built.
 researched estimate — its entire value is that it was fixed before the work began.
 
 **Split, fixed in advance** — so an overrun is visible while there is still time to act on it,
-rather than at hour 80: Phase 3 close-out ~20, Phase 4 ~10, Phase 5 ~15, Phase 6 ~20, Phase 7 ~15.
+rather than in December with an application pending: Phase 3 close-out ~20, Phase 4 ~10, Phase 5 ~15, Phase 6 ~20, Phase 7 ~15.
 The shape matters more than the numbers: Phases 6 and 7 carry the most unknowns and the least
 reference material, and Phase 4 is the one that is mostly configuration.
 
@@ -51,8 +59,8 @@ Under-delivering against a stated target is a result. An unbounded finish is not
 
 ## Where this runs — a VPS, and Linux as a by-product
 
-From day one of January the project runs on a rented **x86-64 Linux VPS** (~€4/month), not the
-laptop. One evening to provision: create the instance, add an SSH key, disable root and password
+From day one — September, not January — the project runs on a rented **x86-64 Linux VPS**
+(~€4/month), not the laptop. One evening to provision: create the instance, add an SSH key, disable root and password
 login, enable a firewall, install `tmux`.
 
 This is a **venue decision, not a new commitment.** Linux fluency is wanted and a separate
@@ -72,8 +80,8 @@ Docker and finish the pipeline. The deliverable is the service; Linux is the by-
 **One more job for the same box.** A companion project needs `perf` profiling in summer 2027,
 and Apple Silicon does not expose hardware performance counters. This VPS is the obvious
 candidate — but cheap VPSs are KVM guests, where counters are often not exposed either. Run
-`perf stat -e cycles,instructions,cache-misses` on it **in January**, six months before it is
-needed. Ten minutes then, or an expensive surprise in July.
+`perf stat -e cycles,instructions,cache-misses` on it **the day it exists**, ten months before it
+is needed. Ten minutes now, or an expensive surprise in July.
 
 ## Approach
 
