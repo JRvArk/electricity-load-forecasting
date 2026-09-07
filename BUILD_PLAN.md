@@ -26,6 +26,11 @@ It is also the cheapest remaining artifact, because most of it is already built.
 70–80 hours across the remaining phases, set **in advance**. The number is a judgement, not a
 researched estimate — its entire value is that it was fixed before the work began.
 
+**Split, fixed in advance** — so an overrun is visible while there is still time to act on it,
+rather than at hour 80: Phase 3 close-out ~20, Phase 4 ~10, Phase 5 ~15, Phase 6 ~20, Phase 7 ~15.
+The shape matters more than the numbers: Phases 6 and 7 carry the most unknowns and the least
+reference material, and Phase 4 is the one that is mostly configuration.
+
 **Stop rule:** at the box limit, ship what is done and record the rest as the finding.
 Under-delivering against a stated target is a result. An unbounded finish is not.
 
@@ -80,7 +85,10 @@ the exercise.
 Implement `ingestion/ingest.py`. Default source is the synthetic generator. Land
 hourly rows in DuckDB via upsert on the timestamp key. Support backfill over a
 date range.
-**Done when:** running ingest twice over the same range leaves row count unchanged.
+**Done when:** running ingest twice over the same range leaves row count unchanged, **and
+re-ingesting a corrected value overwrites it.** The count test alone is too weak — a
+skip-if-exists implementation passes it and still fails the late-revision requirement below,
+which is the one that actually bites on real data.
 
 When I later flip `kind: eia`, the same upsert must hold up against real-world
 mess: paginated responses (EIA caps rows per request), missing hours, and late
@@ -167,13 +175,22 @@ permissions problem — in that order, before reading any code.
 Real forecasting has delayed actuals: at time t I predict hours t+1…t+H, but
 those actuals only arrive later. Every prediction gets persisted (target timestamp
 + model version + value), and when the actual for that timestamp lands, I join the
-two and compute realized error. The rolling realized-error series — plotted against
-EIA's own day-ahead forecast (`forecast_type: DF`) as a baseline — is the
-performance-over-time showcase. This also surfaces the gap between backtest error
+two and compute realized error. The rolling realized-error series, plotted against a
+baseline, is the performance-over-time showcase.
+
+**The baseline has to be source-agnostic, and EIA's `DF` is not.** `config.yaml` exposes
+`forecast_type: DF` under `source.eia` only, while `kind: synthetic` is the default and the source
+CI and tests must stay on. A phase whose headline deliverable only exists on live EIA data cannot be
+tested offline, which breaks hard convention 3. **Primary baseline: seasonal naive** — the value at
+$t-168\text{h}$, same hour last week. It needs no extra data, works on any source including
+synthetic, and is a genuinely hard baseline for hourly load. **Keep EIA's `DF` as a second baseline
+when `kind: eia`**, because beating a real published day-ahead forecast is the better story — it is
+just not the one the gate can depend on. This also surfaces the gap between backtest error
 (what `train.py` reports on a holdout) and live error on genuinely unseen hours.
 Target: a predictions table keyed by (target_ts, model_version) that joins to
 actuals to yield realized error.
-**Done when:** I can show realized error accumulating over time vs. the baseline.
+**Done when:** I can show realized error accumulating over time vs. the seasonal-naive baseline, on
+the synthetic source, offline.
 
 ### Phase 8 — Cloud deployment (Databricks Free Edition) — **deferred, not cut**
 
