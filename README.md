@@ -73,7 +73,7 @@ Databricks.
 - **Model:** scikit-learn `HistGradientBoostingRegressor` — plain by design
 
 The local→cloud lift is a **planned** showcase rather than a built one — Phase 8 is deferred
-past January (see `BUILD_PLAN.md`). The design intent stands: because the stack is OSS,
+past the December finish (see `BUILD_PLAN.md`). The design intent stands: because the stack is OSS,
 migration is a matter of repointing infrastructure (MLflow tracking URI, registry, schedulers)
 rather than rebuilding, and the promotion-gate logic survives intact with only its mechanism
 changing (MLflow stages → Unity Catalog aliases).

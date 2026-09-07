@@ -2,7 +2,7 @@
 
 Personal roadmap and methodology notes for this project.
 
-## Status — un-parked, finishing January 2027
+## Status — un-parked, finishing December 2026
 
 Parked 2026-09-01 alongside a causal-inference engine, on the grounds that neither was on the
 critical path. **Un-parked 2026-09-07**, for this repo only — the sibling stays archived.
@@ -293,8 +293,8 @@ the rejections I think were wrong."*
 > **Deferred 2026-09-07, on scope rather than merit.** The argument for it is real: the platform
 > is free and perpetual, the phase has a genuine done-criterion, and it would make the Phase 7
 > performance view **always-on without a laptop awake** — which is presentation value, not
-> platform engineering. It is out of January because it re-platforms a system that already
-> works, and 70–80 hours does not stretch to it. Revisit after January as a *presentation*
+> platform engineering. It is out of scope because it re-platforms a system that already works,
+> and 70–80 hours does not stretch to it. Revisit after the December finish as a *presentation*
 > decision. Do not start it; do not delete it.
 Lift the working local system onto Databricks Free Edition (perpetual, free,
 serverless). The Phase 7 showcase becomes always-on: a scheduled Job runs
@@ -318,7 +318,7 @@ work through rather than just copy.
 > no terminal state means the project has no terminal state, and this project needs one: it goes
 > on a CV in spring 2027 and gets pointed at in applications. What follows is not a phase of
 > building the system — it is what the finished system is *for*, kept here because that is worth
-> knowing and worth writing up. Nothing below is January work.
+> knowing and worth writing up. Nothing below is in scope for the December finish.
 This is the payoff of building everything above: improving the model is now a safe,
 instrumented loop. I can run a new model or new features as a challenger, let the
 promotion gate decide on merit, and watch live error. A worse idea simply never
