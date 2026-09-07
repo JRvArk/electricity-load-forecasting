@@ -16,6 +16,11 @@ Target properties (write tests for these first)
 Done criterion
     Injecting drifted data into the store visibly flips the retrain signal.
 
+BLOCKED until two decisions are made (BUILD_PLAN.md, Open decisions B and C):
+    the loop-termination mechanism, and a drift_threshold value with a stated
+    basis. 0.5 is a placeholder, and most features here are transforms of one
+    series so they drift together. Both are inputs to the done criterion above.
+
 Workflow (rung 3): design the interface, write tests with a clearly-drifted and a
 clearly-stable fixture, implement to green. Note: there is NO reference for this
 module — it was never implemented, so here you are fully on your own. Good.

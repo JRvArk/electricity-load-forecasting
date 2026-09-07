@@ -32,6 +32,21 @@ The shape matters more than the numbers: Phases 6 and 7 carry the most unknowns 
 reference material, and Phase 4 is the one that is mostly configuration.
 
 **Stop rule:** at the box limit, ship what is done and record the rest as the finding.
+
+### Open decisions — resolve before the phase they gate
+
+Nothing here is hard, and all three are cheap to settle. They are listed because each one is
+easier to decide now than to discover mid-phase, and two of them gate a phase's done-criterion.
+
+| # | Decision | Gates | Why it cannot be deferred into the phase |
+|---|---|---|---|
+| **A** | **Forecast horizon**, and whether lags are measured from the target timestamp or the **forecast origin** | **Phase 2** — `features/build.py`, which is the next thing implemented | With lags relative to the *target*, `lags: [1, 2, 3]` are unavailable at any horizon beyond 3 hours, and the day-ahead baseline needs ~24. See the box in Phase 2 |
+| **B** | **Loop-termination mechanism** — cooldown, drift acknowledgement, or escalation after *k* rejections | **Phase 6** | Phase 6's done-criterion now requires that a persistently drifted store stops retraining. Without a choice there is no criterion to test |
+| **C** | **`drift_threshold` value and its basis** | **Phase 6** | 0.5 is a placeholder. Most features here are transforms of one series, so they drift together and "half of them" ≈ "the series drifted". Fix a value *with a stated reason*, the way the vol-surface thresholds were fixed in advance |
+
+**Do not start Phase 6 with B and C open.** Both feed its done-criterion directly, and deciding
+them under time pressure at hour 60 of an 80-hour box is how a threshold ends up being whatever
+made the test pass.
 Under-delivering against a stated target is a result. An unbounded finish is not.
 
 ## Where this runs — a VPS, and Linux as a by-product
@@ -169,6 +184,10 @@ the filename stays for continuity.) Promotion uses the Phase 3 gate.
    an orchestrator, if one is ever wanted, becomes a wrapper rather than a rewrite.
 
 ### Phase 6 — Monitoring + auto-retrain
+
+> **Blocked until open decisions B and C are settled** (see *Open decisions*, above). B is the
+> loop-termination mechanism, C is the `drift_threshold` basis. Both are inputs to this phase's
+> done-criterion, not outputs of it.
 Implement `monitoring/drift.py` with Evidently (data drift + prediction drift on
 a rolling window). Wire a monitor entry point that runs the drift check and triggers the
 Phase 5 retrain flow when drift crosses the configured threshold.
