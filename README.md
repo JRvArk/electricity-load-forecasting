@@ -10,8 +10,9 @@ retraining.
 
 ## Status
 
-Ingestion, feature building and tracked training are in place. **Phase 3 — registry and
-serving — is open.** Phases 4–7 (containerise + CI, orchestration, drift monitoring with
+**Phase 1 (ingestion) is implemented on the synthetic source**; the EIA path is still a stub.
+**Phase 2 (features, training) is in progress** — tests written, implementation pending.
+**Phase 3 (registry, serving) is open.** Phases 4–7 (containerise + CI, orchestration, drift monitoring with
 auto-retrain, live evaluation) are scheduled as one time-boxed block in **January 2027**, run on
 a Linux VPS rather than a laptop. Phase 8 (cloud) is deferred; Phase 9 is cut, so the project
 has a finish line. Detail in [BUILD_PLAN.md](BUILD_PLAN.md).
@@ -21,10 +22,10 @@ so it is clear what runs today and what does not.
 
 ## What it does
 
-- **Idempotent ingestion** *(Phase 1, in place)* — hourly observations land in DuckDB via upsert on the
+- **Idempotent ingestion** *(Phase 1, synthetic source implemented; EIA path stubbed)* — hourly observations land in DuckDB via upsert on the
   timestamp key. Re-running a backfill never duplicates or corrupts rows, and late
   upstream revisions overwrite cleanly.
-- **Reproducible training** *(Phase 2, in place)* — every model is produced by a tracked MLflow run with
+- **Reproducible training** *(Phase 2, in progress)* — every model is produced by a tracked MLflow run with
   logged params, metrics, and the exact feature-config hash. No model exists
   outside the tracking store.
 - **Earned promotion** *(Phase 3, open)* — a retrained model only reaches `Production` if it beats the
