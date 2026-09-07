@@ -40,11 +40,11 @@ easier to decide now than to discover mid-phase, and two of them gate a phase's 
 
 | # | Decision | Gates | Why it cannot be deferred into the phase |
 |---|---|---|---|
-| **A** | **Forecast horizon**, and whether lags are measured from the target timestamp or the **forecast origin** | **Phase 2** — `features/build.py`, which is the next thing implemented | With lags relative to the *target*, `lags: [1, 2, 3]` are unavailable at any horizon beyond 3 hours, and the day-ahead baseline needs ~24. See the box in Phase 2 |
+| ~~**A**~~ | ~~Forecast horizon and lag frame~~ — **decided 2026-09-07: $H = 24$, lags from the forecast origin** | ~~Phase 2~~ | Settled. Reasoning in the Phase 2 box |
 | **B** | **Loop-termination mechanism** — cooldown, drift acknowledgement, or escalation after *k* rejections | **Phase 6** | Phase 6's done-criterion now requires that a persistently drifted store stops retraining. Without a choice there is no criterion to test |
 | **C** | **`drift_threshold` value and its basis** | **Phase 6** | 0.5 is a placeholder. Most features here are transforms of one series, so they drift together and "half of them" ≈ "the series drifted". Fix a value *with a stated reason*, the way the vol-surface thresholds were fixed in advance |
 
-**Do not start Phase 6 with B and C open.** Both feed its done-criterion directly, and deciding
+A is settled. **Do not start Phase 6 with B and C open.** Both feed its done-criterion directly, and deciding
 them under time pressure at hour 60 of an 80-hour box is how a threshold ends up being whatever
 made the test pass.
 Under-delivering against a stated target is a result. An unbounded finish is not.
@@ -112,9 +112,9 @@ The upsert must overwrite on the timestamp key, not just skip-if-exists.
 
 ### Phase 2 — Features + baseline + tracking
 
-> **[OPEN — decision A, and it blocks this phase.]** *What is the forecast horizon, and are lags
-> measured from the target timestamp or the forecast origin?* Neither is defined anywhere: there is
-> no `horizon` key in `config.yaml`, and `test_horizon_hours` is the holdout length, not a horizon.
+> **[DECIDED 2026-09-07 — $H = 24$, lags measured from the forecast origin.]** Neither was defined
+> anywhere: there was no `horizon` key in `config.yaml`, and `test_horizon_hours` is the holdout
+> length, not a horizon.
 >
 > It matters concretely. `build.py`'s no-leakage property reads *"every feature at time $t$ uses
 > only information available strictly before $t$"*, which is correct for a **one-step** model and
@@ -125,15 +125,22 @@ The upsert must overwrite on the timestamp key, not just skip-if-exists.
 > would not match it. Phase 7 exists to surface exactly that gap, which is a slow and expensive way
 > to learn it.
 >
-> **Recommended resolution — it is a definition, not a config change.** Measure lags from the
-> **forecast origin**: lag-1 means "the most recent observed value at forecast time", available at
-> every horizon. The existing list `[1, 2, 3, 24, 48, 168]` then stays valid as written, and the
-> horizon becomes an explicit input — a `horizon_hours` key, with the target reshaped so each row
-> is (origin, horizon, target). Recommend **$H = 24$**, matching the day-ahead baseline and the
-> README's "short-horizon" claim.
+> **The resolution is a definition, not a config change.** Lags are measured from the **forecast
+> origin**: lag-1 means "the most recent observed value at forecast time", which is available at
+> every horizon. The existing list `[1, 2, 3, 24, 48, 168]` therefore stays valid exactly as
+> written — nothing in it was wrong, only the frame it was read in.
 >
-> Restate `build.py`'s leakage property once this is settled: *available at the forecast origin*,
-> not *strictly before the target timestamp*. Those differ for every $H > 1$.
+> **$H = 24$**, matching the EIA day-ahead baseline and the README's "short-horizon" claim. It is
+> also the version that is a forecasting problem: at $H = 1$ hourly load is close to a persistence
+> problem and a seasonal-naive baseline is nearly unbeatable, so there would be nothing to
+> demonstrate.
+>
+> **What this makes concrete.** `config.yaml` gains `horizon_hours: 24`. Each training row becomes
+> (origin $t$, horizon $h \in 1\dots24$, target at $t+h$), with $h$ itself a feature — one model
+> across horizons rather than 24 models, which is simpler and lets the model learn that error grows
+> with $h$. `build.py`'s leakage property is stated against the **origin**, not the target
+> timestamp. And Phase 7's realized-error series becomes naturally two-dimensional: error by
+> horizon, which is a better plot than a single line and shows where the model degrades.
 Implement `features/build.py` (lag features, rolling means, hour/day/month,
 holiday flag) and `training/train.py` (train `HistGradientBoostingRegressor`,
 log params + MAE/RMSE + the feature config hash to MLflow).

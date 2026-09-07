@@ -6,14 +6,13 @@ Responsibility
     country) from config so the same code works on any domain.
 
 Target properties (write tests for these first)
-    - No leakage: every feature must use only information available AT THE
-      FORECAST ORIGIN — not merely "strictly before the target timestamp".
-      Those differ for every horizon beyond one step, and the config's
-      lags [1, 2, 3] are leakage at a day-ahead horizon if read against the
-      target. BLOCKED on BUILD_PLAN.md open decision A (horizon, and whether
-      lags are origin-relative); the recommendation there is origin-relative
-      lags with H = 24, which keeps the existing lag list valid.
-      (Rolling windows must be shifted accordingly either way.)
+    - No leakage: every feature uses only information available AT THE FORECAST
+      ORIGIN t — not merely "strictly before the target timestamp t+h". Those
+      differ for every h > 1, and read against the target, lags [1, 2, 3] would
+      be leakage at H=24. Rolling windows shift accordingly.
+    - Rows are (origin, horizon, target): each origin t produces h = 1..24 rows
+      with the target at t+h, and horizon is itself a predictor. One model spans
+      all horizons (cfg.training.horizon_hours, decided 2026-09-07).
     - No NaNs in the output: rows that can't be fully populated (the warm-up
       period for the largest lag/window) are dropped.
     - Predictor set is well-defined: a caller can ask which columns are predictors

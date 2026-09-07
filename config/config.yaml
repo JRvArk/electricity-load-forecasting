@@ -38,10 +38,10 @@ storage:
   feature_table: features
 
 features:
-  # OPEN (decision A, BUILD_PLAN.md): these are only valid if lags are measured
-  # from the FORECAST ORIGIN. Read against the target timestamp, lags 1/2/3 are
-  # leakage at any horizon beyond 3h — and the EIA baseline is a day-ahead
-  # forecast. Settle before implementing features/build.py.
+  # Lags are measured from the FORECAST ORIGIN, not the target timestamp
+  # (decided 2026-09-07). lag-1 = the most recent observed value at forecast
+  # time, so every lag below is available at every horizon. Read against the
+  # target instead, lags 1/2/3 would be leakage at H=24.
   lags: [1, 2, 3, 24, 48, 168]       # hours
   rolling_windows: [24, 168]         # hours
   calendar: true
@@ -52,6 +52,9 @@ features:
   holidays_country: NL
 
 training:
+  # Predict t+1 .. t+horizon_hours from information available at t. Horizon is a
+  # feature, so one model spans all horizons rather than 24 separate models.
+  horizon_hours: 24                  # day-ahead, matching the EIA DF baseline
   model: hist_gradient_boosting
   test_horizon_hours: 168            # last week held out
   primary_metric: mae                # lower is better
