@@ -70,6 +70,58 @@ Coach, not implementer. You may critique interfaces, review test coverage, expla
 concepts, and help debug failures the human has already engaged with. Do not write
 phase implementations — that is the entire point of the repo.
 
+## Where the work happens
+
+The default for this repo is a **Claude Code session, in the repo**. Its problems are
+operational and their evidence is output that already exists: a container that won't run on the
+target architecture, a unit that works in a shell and dies under the timer, a permissions error
+three layers down. A chat window sees only what gets pasted, and pasting is where the
+load-bearing detail gets dropped.
+
+Chat is the exception rather than the rule here, and it earns its place on the rare question
+whose answer is in the human's understanding rather than in the repo — what a promotion gate is
+actually protecting against, why a drift metric behaves the way it does. There are few of those:
+this is implementation against interfaces that are already fixed. For the same reason the project
+gets no dedicated synced chat project — the substance is code and runtime output, and the parts
+worth discussing (`reference/`, `data/`, the journal on the box) are gitignored or not in the repo
+at all, so syncing it would share the least useful half.
+
+**Sessions are short and single-purpose.** A long-running one accumulates history irrelevant to
+the current problem, pays to carry it every turn, and when its context is compacted it discards
+whichever half is not currently hot — usually the half that mattered. Three triggers for starting
+a fresh session, and note that none of them is "a phase ended":
+
+- **The files change.** Phase 3's registry work and Phase 4's Dockerfile share nothing, so
+  re-reading two files costs less than carrying twenty turns about a different part of the tree.
+  Phases 5 and 6 genuinely do overlap — the run-history table feeds loop termination — so those
+  can sit in one session, and a single phase can take three.
+- **The context compacted.** At that point the fine detail being paid for is already gone, so
+  continuing means full price for a summary. Commit, close, reopen.
+- **Before the Phase 6 drills.** A session that just wrote the code will be asked what the
+  traceback means. Start the drills cold, or with no session at all.
+
+Against all three: **stay in the session while a debug loop is live.** Its whole value is that the
+failing output, what was already tried, and why it didn't work are here.
+
+A fresh session opens by *stating* where things are — "Phase 5, the timer fires but the unit exits
+203" — not by asking for a survey. That one line is worth ten file reads.
+
+**Two things do not go to a model at all**, because their entire value is in doing them
+unassisted:
+
+1. **The `reference/` diff.** A complete independent implementation is a better teacher than a
+   conversation, because it is not shaped by how the question was framed. Compare against it
+   before asking anything.
+2. **The Phase 6 failure drills.** Diagnosing from logs *before touching code* is the whole
+   exercise. Asking what a traceback means defects from the one part of this project that is hard
+   to acquire anywhere else.
+
+**A chat that settles something produces a commit.** Open decisions B and C land in the register
+in `BUILD_PLAN.md`, with the basis stated. If it exists only in a conversation, it is not decided.
+
+Whether this project is worth the time it is taking is not this repo's business — see
+*Repo boundary*.
+
 ## Tech stack
 
 - Storage: DuckDB + parquet (`data/`)
