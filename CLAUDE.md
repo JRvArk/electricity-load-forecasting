@@ -22,12 +22,12 @@ curriculum, and a separate learning track has been explicitly refused.
 ## Repo boundary — everything here is addressed to a reader who has only this repo
 
 - **Motivation is argued in project terms.** Why a phase exists, why one was cut, why the box is
-  70–80 hours — justify it from what the system needs and what an unfinished system costs. Do not
+  ~95 hours — justify it from what the system needs and what an unfinished system costs. Do not
   import reasons from outside the repo: no career targets, employers, courses, or other planning
   documents, and no naming of the places those live. If a reason cannot be stated in terms of this
   codebase, it is not a reason this file should carry.
 - **No forward dates.** A date is allowed only as provenance on a decision already taken
-  (*"decided 2026-09-07"*). Everything else is expressed as budget, rate and ordering — "70–80
+  (*"decided 2026-09-07"*). Everything else is expressed as budget, rate and ordering — "~95
   hours", "6–12 hrs/wk", "queued behind Phase 7" — which is what the plan actually needs in order
   to be actionable, and which stays true when the calendar moves. Scheduling belongs to whatever
   is doing the scheduling; this repo is not it.

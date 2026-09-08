@@ -317,7 +317,11 @@ works on any source including synthetic, and is a genuinely hard baseline for ho
 Beating a transmission operator's forecast on its own zone is the strongest story the headline
 claim admits, and ENTSO-E publishes it for every European bidding zone through the same API as
 the actuals — it is just not the baseline the gate can depend on. **The write-up's headline is
-realised error against that forecast, by horizon.** This also surfaces the gap between backtest
+realised error against that forecast, by horizon.** The feature set carries no weather and a
+transmission operator's forecast does, so the expected result is a **loss by a weather-sized
+margin**, by horizon. The headline reports the gap whichever its sign and attributes it; weather is
+not added to close it — that would be a different project, and it is listed below as exactly that.
+If the published forecast itself proves weak on this zone, that is the finding instead. This also surfaces the gap between backtest
 error (what `train.py` reports on a holdout) and live error on genuinely unseen hours.
 Target: a predictions table keyed by (target_ts, model_version) that joins to
 actuals to yield realized error.
@@ -337,7 +341,7 @@ the rejections I think were wrong."*
 > is free and perpetual, the phase has a genuine done-criterion, and it would make the Phase 7
 > performance view **always-on without a laptop awake** — which is presentation value, not
 > platform engineering. It is out of scope because it re-platforms a system that already works,
-> and 70–80 hours does not stretch to it. Revisit once Phase 7 has closed, as a *presentation*
+> and the ~95-hour box does not stretch to it. Revisit once Phase 7 has closed, as a *presentation*
 > decision. Do not start it; do not delete it.
 Lift the working local system onto Databricks Free Edition (perpetual, free,
 serverless). The Phase 7 showcase becomes always-on: a scheduled Job runs
