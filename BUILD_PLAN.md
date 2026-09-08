@@ -142,6 +142,10 @@ I'm deliberately working at a level where properties are specified but function
 signatures and test design are mine to figure out. The design thinking is part of
 the exercise.
 
+**Defects found by review live in [DEFECTS.md](DEFECTS.md), filed by the phase that fixes them
+rather than by the phase they break.** Read that file's section when a phase starts: several of its
+entries are an hour in the phase that owns them and a blocked evening in the phase they reach.
+
 ## Phase roadmap
 
 ### Phase 1 — Ingestion + storage

@@ -17,7 +17,8 @@ unstarted. The remaining work is time-boxed and runs on a Linux VPS rather than 
 the order a running system needs — 2 → 3 → 5 → 7 → 4 → 6. **Finished means Phases 1–5 plus
 Phase 7 with `GET /status` reachable**: a scheduled, gated, served model with a live error series.
 Phase 6 is inside the box if hours remain. Phase 8 (cloud) is deferred and Phase 9 is cut. Detail
-in [BUILD_PLAN.md](BUILD_PLAN.md).
+in [BUILD_PLAN.md](BUILD_PLAN.md); known defects, filed by the phase that fixes them, in
+[DEFECTS.md](DEFECTS.md).
 
 The list below is the system **as designed**, with the phase that builds each capability named —
 so it is clear what runs today and what does not.

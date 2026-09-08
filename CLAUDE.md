@@ -1,7 +1,9 @@
 # CLAUDE.md — electricity-load-forecasting
 
 Instructions for Claude Code. Read this fully before touching anything.
-The human-facing learning guide and phase roadmap live in `BUILD_PLAN.md`.
+The human-facing learning guide and phase roadmap live in `BUILD_PLAN.md`; defects found by
+review, filed by the phase that fixes them, live in `DEFECTS.md` — read the section for the phase
+you are working in before planning it.
 
 ## Status — read this before planning anything
 
