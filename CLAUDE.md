@@ -6,7 +6,7 @@ The human-facing learning guide and phase roadmap live in `BUILD_PLAN.md`.
 ## Status — read this before planning anything
 
 Parked 2026-09-01, **un-parked 2026-09-07**. **Phase 1 is implemented on the synthetic source**
-(the EIA retrieval path is a stub); **Phase 2 is stubs** — every body in `build.py` is `pass`,
+(the ENTSO-E retrieval path is a stub); **Phase 2 is stubs** — every body in `build.py` is `pass`,
 `train.py` likewise, tests about a third written; **Phase 3 is open**; **Phases 4–7 are
 unstarted**. That is one module of seven *(status corrected 2026-09-08; the earlier block
 overstated it)*. The remaining work is **time-boxed**, at 6–12 hrs/wk, run on an x86-64 Linux VPS
@@ -60,7 +60,7 @@ you've drifted from the goal.
 3. **The domain is swappable.** Dataset choice lives in `config/config.yaml`
    only. No module hardcodes "electricity". A synthetic generator is the default
    source so the system runs with zero external dependencies — keep tests and CI
-   on it (they must stay offline and deterministic). Real data (EIA, `kind: eia`)
+   on it (they must stay offline and deterministic). Real data (ENTSO-E, `kind: entsoe`)
    is opt-in for live runs.
 4. **Promotion is earned.** A retrained model only reaches the `Production` stage
    if it beats the incumbent on a holdout metric. A worse model must never serve.
@@ -130,7 +130,8 @@ Whether this project is worth the time it is taking is not this repo's business 
 ## Tech stack
 
 - Storage: DuckDB + parquet (`data/`)
-- Data: synthetic generator (default, offline) | EIA open data API v2 (live)
+- Data: synthetic generator (default, offline) | ENTSO-E Transparency Platform API (live,
+  decided 2026-09-08 — it replaced a US-only source)
 - Model: scikit-learn (`HistGradientBoostingRegressor`) — intentionally plain
 - Tracking + registry: MLflow (local file store under `mlruns/`)
 - Serving: FastAPI + Uvicorn

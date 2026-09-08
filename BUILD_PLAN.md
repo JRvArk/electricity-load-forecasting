@@ -153,9 +153,9 @@ re-ingesting a corrected value overwrites it.** The count test alone is too weak
 skip-if-exists implementation passes it and still fails the late-revision requirement below,
 which is the one that actually bites on real data.
 
-When I later flip `kind: eia`, the same upsert must hold up against real-world
-mess: paginated responses (EIA caps rows per request), missing hours, and late
-revisions, where a previously-published hour comes back with a corrected value.
+When I later flip `kind: entsoe`, the same upsert must hold up against real-world
+mess: request windows capped by the API so a long backfill is several calls, missing hours, and
+late revisions, where a previously-published hour comes back with a corrected value.
 The upsert must overwrite on the timestamp key, not just skip-if-exists.
 
 ### Phase 2 — Features + baseline + tracking

@@ -1,4 +1,5 @@
-# Phase 4 — service + mlflow. Extend with a Prefect worker in Phase 5.
+# Phase 4 — service + mlflow. Phase 5 scheduling is systemd timers on the host, not a worker
+# service here (decided 2026-09-07; Prefect dropped).
 services:
   mlflow:
     image: ghcr.io/mlflow/mlflow:latest
