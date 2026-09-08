@@ -57,6 +57,7 @@ class FeaturesCfg(BaseModel):
 
 
 class TrainingCfg(BaseModel):
+    horizon_hours: int
     model: str
     test_horizon_hours: int
     primary_metric: str

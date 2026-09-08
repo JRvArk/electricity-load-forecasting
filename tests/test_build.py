@@ -1,4 +1,4 @@
-from forecaster.ingestion.ingest import _create_synthetic_data
+from forecaster.ingestion.ingest import _create_synthetic_data, store_data
 import pytest
 import duckdb
 import pandas as pd
@@ -23,8 +23,12 @@ def cfg():
 
 
 @pytest.fixture
-def db_connection():
+def db_connection(cfg, synthetic_data: pd.DataFrame):
+    """An in-memory store with the raw table already populated, so retrieve_data
+    has something to retrieve. Populated through the Phase 1 path rather than by
+    hand, so these tests see exactly the shape ingestion produces."""
     conn = duckdb.connect()
+    store_data(conn, synthetic_data, cfg.storage.raw_table, cfg.domain.timestamp_column)
     yield conn
     conn.close()
 
