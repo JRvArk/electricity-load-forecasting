@@ -22,7 +22,8 @@ from a service is still to be written, and that gap is the whole subject of the 
 - **The finish comes first, and it is a real constraint.** A running system reads very
   differently from a half-built one, and this is the repo a reader actually clicks. Completion
   beats extension everywhere below: nothing here is worth being unfinished for.
-- **Scope:** **Phase 2 through Phase 7.** Phase 2 is stubs, not a close-out.
+- **Scope and finish line:** **Phases 2–7, built 2 → 3 → 5 → 7 → 4 → 6.** Finished means
+  Phases 1–5 plus 7 with `GET /status` live; Phase 6 if hours remain. See *Build order*, below.
 - **Venue:** a rented x86-64 Linux VPS, not the laptop — provisioned on **day one**.
   See *Where this runs*, below.
 - **Then it is done.** It gets written up and it stops; it is not maintained as a rolling
@@ -41,7 +42,27 @@ Phase 7 ~15 · Phase 4 ~5 · Phase 6 ~20.
 The shape matters more than the numbers: Phases 6 and 7 carry the most unknowns and the least
 reference material, and Phase 4 is the one that is mostly configuration.
 
-**Stop rule:** at the box limit, ship what is done and record the rest as the finding.
+**Stop rule:** at the box limit, ship the finish line — Phases 1–5 plus 7, `GET /status` live —
+and record the rest as the finding. Phase 6 is what it eats first.
+
+### Build order — 2 → 3 → 5 → 7 → 4 → 6, and what "finished" means
+
+The phases are numbered by dependency; they are **built** in the order a running system needs
+them, decided 2026-09-08:
+
+- **Phase 7's realised-error series is the headline deliverable, and its value grows with
+  wall-clock time.** Every week the scheduled loop is not running is a week less of history in
+  the write-up. So Phase 5 (scheduling) and Phase 7 (evaluation) come as early as the
+  dependencies allow — immediately after a model exists and is served.
+- **Phase 4 (containerisation + CI) is not a prerequisite for running on the host.** A venv under
+  a systemd unit runs today. It is packaging, and packaging comes after the thing packaged.
+- **Phase 6 (drift + auto-retrain) carries the most unknowns and has no reference solution.** It
+  is the right thing for the stop rule to consume if the box runs out.
+
+**Finished means Phases 1–5 plus Phase 7, with `GET /status` reachable** — a scheduled, gated,
+served model with a live error series. Phase 6 is inside the box if hours remain and is otherwise
+recorded as the finding. The stop rule now has a named thing to ship. Phase 8 stays deferred;
+Phase 9 stays cut.
 
 ### Open decisions — resolve before the phase they gate
 

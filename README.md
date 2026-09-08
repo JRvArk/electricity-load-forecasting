@@ -13,9 +13,11 @@ retraining.
 **Phase 1 (ingestion) is implemented on the synthetic source**; the EIA path is still a stub.
 **Phase 2 (features, training) is stubs** — every function body in `build.py` is `pass`, and its
 tests are about a third written. **Phase 3 (registry, serving) is open.** Phases 4–7 are
-unstarted. The remaining work is time-boxed and runs on a Linux VPS rather than a laptop; Phase 8
-(cloud) is deferred and Phase 9 is cut, so the project has a finish line. Detail in
-[BUILD_PLAN.md](BUILD_PLAN.md).
+unstarted. The remaining work is time-boxed and runs on a Linux VPS rather than a laptop, built in
+the order a running system needs — 2 → 3 → 5 → 7 → 4 → 6. **Finished means Phases 1–5 plus
+Phase 7 with `GET /status` reachable**: a scheduled, gated, served model with a live error series.
+Phase 6 is inside the box if hours remain. Phase 8 (cloud) is deferred and Phase 9 is cut. Detail
+in [BUILD_PLAN.md](BUILD_PLAN.md).
 
 The list below is the system **as designed**, with the phase that builds each capability named —
 so it is clear what runs today and what does not.
@@ -35,7 +37,7 @@ so it is clear what runs today and what does not.
   predictions with no code change and no redeploy.
 - **Orchestration** *(Phase 5, unstarted)* — scheduled runs of ingest → features → train →
   promote, run by systemd timers on the host.
-- **Drift monitoring + auto-retrain** *(Phase 6, unstarted)* — Evidently watches data and prediction drift
+- **Drift monitoring + auto-retrain** *(Phase 6, unstarted — inside the box if hours remain)* — Evidently watches data and prediction drift
   on a rolling window and fires a retrain when drift crosses a configured threshold.
 - **Live evaluation** *(Phase 7, unstarted)* — every prediction is persisted and joined to actuals as they
   arrive, producing a realized-error series tracked over time against a day-ahead
