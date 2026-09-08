@@ -64,6 +64,23 @@ served model with a live error series. Phase 6 is inside the box if hours remain
 recorded as the finding. The stop rule now has a named thing to ship. Phase 8 stays deferred;
 Phase 9 stays cut.
 
+### Hand-written or delegated — split by where the learning is
+
+Seven hand-written modules under the full rung-3 loop do not fit a ~95-hour box beside the rate
+constraint. So the split is explicit, decided 2026-09-08:
+
+| Hand-written (rung 3, unchanged) | Delegated to Claude Code |
+|---|---|
+| Phase 2 `build.py` and `train.py` — the leakage-against-origin logic and the origin/horizon row explosion are the point | Phase 4 — `Dockerfile`, `docker-compose.yml`, `ci.yml`: configuration |
+| Phase 3 `promote.py` — the same-holdout gate, and the test that one model on two holdouts of differing difficulty is not judged better on the easier one | Phase 7 plumbing — the predictions table, the join to actuals, `GET /status`. The **evaluation logic and the baseline choice stay hand-written** |
+| Phase 5 unit files and timer — the "works in the shell, fails under the timer" lesson only lands if written by hand | |
+| Phase 6 drills — diagnosing from logs before touching code is the exercise | |
+
+**Delegation rule.** The human writes the tests for delegated modules too, so the rung-3 order
+survives; delegated code is reviewed against those tests before merge. A reader evaluating the
+code should be able to learn which parts the author can defend line by line — that is what the
+README's *How this was built* section is for.
+
 ### Open decisions — resolve before the phase they gate
 
 Nothing here is hard, and all three are cheap to settle. They are listed because each one is

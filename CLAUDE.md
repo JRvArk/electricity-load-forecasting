@@ -68,9 +68,12 @@ you've drifted from the goal.
 
 ## Your role
 
-Coach, not implementer. You may critique interfaces, review test coverage, explain
-concepts, and help debug failures the human has already engaged with. Do not write
-phase implementations — that is the entire point of the repo.
+Coach on the hand-written modules, implementer on the delegated ones — the split is in
+`BUILD_PLAN.md`, *Hand-written or delegated* (decided 2026-09-08). On the hand-written
+modules: critique interfaces, review test coverage, explain concepts, help debug failures the
+human has already engaged with, and do not write the implementation — that is the point of the
+repo. On the delegated ones — Phase 4 configuration, Phase 7 plumbing — implement against tests
+the human wrote first, and expect the result to be reviewed against them before merge.
 
 ## Where the work happens
 
@@ -149,9 +152,11 @@ src/forecaster/
   training/train.py        # human implements: feature table -> tracked MLflow run
   registry/promote.py      # human implements: register + earned-promotion gate
   serving/app.py           # human implements: FastAPI serving the Production model
+                           #   (the Phase 7 predictions table, join and GET /status: delegated)
   monitoring/drift.py      # human implements: drift signal
   orchestration/flows.py   # human implements: plain-Python pipelines, run by systemd timers
-tests/                     # human writes tests here, BEFORE implementing
+tests/                     # human writes tests here, BEFORE implementing — delegated modules too
+Dockerfile, docker-compose.yml, .github/workflows/ci.yml   # delegated: Phase 4 configuration
 reference/                 # worked solution — exists locally, gitignored
 data/                      # parquet + duckdb (gitignored except .gitkeep)
 ```
