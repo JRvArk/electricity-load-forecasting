@@ -6,9 +6,11 @@ The human-facing learning guide and phase roadmap live in `BUILD_PLAN.md`.
 ## Status — read this before planning anything
 
 Parked 2026-09-01, **un-parked 2026-09-07**. **Phase 1 is implemented on the synthetic source**
-(the EIA retrieval path is a stub); **Phase 2 is in progress** — tests written, `build.py` and
-`train.py` still stubs; **Phase 3 is open**. Phases 4–7 are the current work: **70–80 hours,
-time-boxed**, at 6–12 hrs/wk, run on an x86-64 Linux VPS rather than the laptop. **Finishing is a
+(the EIA retrieval path is a stub); **Phase 2 is stubs** — every body in `build.py` is `pass`,
+`train.py` likewise, tests about a third written; **Phase 3 is open**; **Phases 4–7 are
+unstarted**. That is one module of seven *(status corrected 2026-09-08; the earlier block
+overstated it)*. The remaining work is **time-boxed**, at 6–12 hrs/wk, run on an x86-64 Linux VPS
+rather than the laptop. **Finishing is a
 hard constraint** — scope that threatens it loses, every time. **Phase 9 is cut** (it had no
 terminal state and this project needs one); **Phase 8 is deferred**, not dismissed. Reasoning and
 the stop rule are in `BUILD_PLAN.md`.

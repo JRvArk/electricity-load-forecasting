@@ -7,10 +7,11 @@ Personal roadmap and methodology notes for this project.
 Parked 2026-09-01 alongside a companion causal-inference engine, on the grounds that neither was
 on the critical path. **Un-parked 2026-09-07**, for this repo only — the sibling stays archived.
 
-The reason it came back: most of it is already built, and what is left — orchestration, drift
-monitoring, an automated retrain loop, live evaluation — is exactly the part that separates a
-pipeline from a service. That gap is the whole subject of the repo, so leaving it open leaves
-the README making a claim the code does not support.
+The reason it came back: the README describes a service, and the source is one module of seven
+— ingestion on the synthetic source, with features, training, registry, serving, orchestration,
+monitoring and evaluation all stubs *(status corrected 2026-09-08; the earlier block said "most of
+it is already built", which the source did not support)*. Everything that separates a pipeline
+from a service is still to be written, and that gap is the whole subject of the repo.
 
 - **Rate:** **6–12 hrs/wk, sustained rather than concentrated.** This project takes the
   low-intensity slot deliberately: what remains is implementation against interfaces that are
@@ -21,8 +22,7 @@ the README making a claim the code does not support.
 - **The finish comes first, and it is a real constraint.** A running system reads very
   differently from a half-built one, and this is the repo a reader actually clicks. Completion
   beats extension everywhere below: nothing here is worth being unfinished for.
-- **Scope:** **Phase 3 close-out through Phase 7.** Phase 3 is still open, so that is real work
-  rather than a formality.
+- **Scope:** **Phase 2 through Phase 7.** Phase 2 is stubs, not a close-out.
 - **Venue:** a rented x86-64 Linux VPS, not the laptop — provisioned on **day one**.
   See *Where this runs*, below.
 - **Then it is done.** It gets written up and it stops; it is not maintained as a rolling
