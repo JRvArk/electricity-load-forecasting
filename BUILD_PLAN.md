@@ -2,32 +2,31 @@
 
 Personal roadmap and methodology notes for this project.
 
-## Status — un-parked, finishing December 2026
+## Status — un-parked, running to a fixed finish
 
-Parked 2026-09-01 alongside a causal-inference engine, on the grounds that neither was on the
-critical path. **Un-parked 2026-09-07**, for this repo only — the sibling stays archived.
+Parked 2026-09-01 alongside a companion causal-inference engine, on the grounds that neither was
+on the critical path. **Un-parked 2026-09-07**, for this repo only — the sibling stays archived.
 
-The reason it came back: the career target is now **quant research in two employer clusters**,
-prop firms and **energy trading houses**, and this is the engineering artifact for the second.
-It is also the cheapest remaining artifact, because most of it is already built.
+The reason it came back: most of it is already built, and what is left — orchestration, drift
+monitoring, an automated retrain loop, live evaluation — is exactly the part that separates a
+pipeline from a service. That gap is the whole subject of the repo, so leaving it open leaves
+the README making a claim the code does not support.
 
-- **Slot:** **September–December 2026**, at 6–12 hrs/wk alongside semester 1 *(moved from January
-  on 2026-09-07)*. This project holds the term-time project slot because its remaining work is
-  implementation against fixed interfaces, which survives being picked up and put down in six-hour
-  weeks. The vol-surface engine takes the concentrated January block instead — its Phase 1 is
-  exploratory analysis that wants sustained attention.
-- **Budget:** **70–80 hours, time-boxed** — which is 7–13 weeks at 6–12 hrs/wk, so it fits the
-  term with margin.
-- **Deadline, and it is real.** The first internship applications may go out in **December 2026**.
-  This is the artifact they would carry: it is already on the CV, so it is the repo a reader
-  clicks, and a finished running system reads very differently from a half-built one. Its write-up
-  joins the VRP and Greenchoice notes in the December post-finals window.
+- **Rate:** **6–12 hrs/wk, sustained rather than concentrated.** This project takes the
+  low-intensity slot deliberately: what remains is implementation against interfaces that are
+  already fixed, and that survives being picked up and put down in six-hour weeks. Open-ended
+  exploratory work does not, and is queued behind it in a block of its own.
+- **Budget:** **70–80 hours, time-boxed** — 7–13 weeks at that rate, so the rate is not the
+  binding constraint.
+- **The finish comes first, and it is a real constraint.** A running system reads very
+  differently from a half-built one, and this is the repo a reader actually clicks. Completion
+  beats extension everywhere below: nothing here is worth being unfinished for.
 - **Scope:** **Phase 3 close-out through Phase 7.** Phase 3 is still open, so that is real work
   rather than a formality.
-- **Venue:** a rented x86-64 Linux VPS, not the laptop — provisioned **in September**, day one.
+- **Venue:** a rented x86-64 Linux VPS, not the laptop — provisioned on **day one**.
   See *Where this runs*, below.
-- **After December it is done.** It goes on the CV and gets written up; it is not maintained as a
-  rolling project. That is what cutting Phase 9 is for.
+- **Then it is done.** It gets written up and it stops; it is not maintained as a rolling
+  project. That is what cutting Phase 9 is for.
 
 ### The time box, fixed before starting
 
@@ -35,7 +34,8 @@ It is also the cheapest remaining artifact, because most of it is already built.
 researched estimate — its entire value is that it was fixed before the work began.
 
 **Split, fixed in advance** — so an overrun is visible while there is still time to act on it,
-rather than in December with an application pending: Phase 3 close-out ~20, Phase 4 ~10, Phase 5 ~15, Phase 6 ~20, Phase 7 ~15.
+rather than at the finish with nothing left to cut: Phase 3 close-out ~20, Phase 4 ~10,
+Phase 5 ~15, Phase 6 ~20, Phase 7 ~15.
 The shape matters more than the numbers: Phases 6 and 7 carry the most unknowns and the least
 reference material, and Phase 4 is the one that is mostly configuration.
 
@@ -50,7 +50,7 @@ easier to decide now than to discover mid-phase, and two of them gate a phase's 
 |---|---|---|---|
 | ~~**A**~~ | ~~Forecast horizon and lag frame~~ — **decided 2026-09-07: $H = 24$, lags from the forecast origin** | ~~Phase 2~~ | Settled. Reasoning in the Phase 2 box |
 | **B** | **Loop-termination mechanism** — cooldown, drift acknowledgement, or escalation after *k* rejections | **Phase 6** | Phase 6's done-criterion now requires that a persistently drifted store stops retraining. Without a choice there is no criterion to test |
-| **C** | **`drift_threshold` value and its basis** | **Phase 6** | 0.5 is a placeholder. Most features here are transforms of one series, so they drift together and "half of them" ≈ "the series drifted". Fix a value *with a stated reason*, the way the vol-surface thresholds were fixed in advance |
+| **C** | **`drift_threshold` value and its basis** | **Phase 6** | 0.5 is a placeholder. Most features here are transforms of one series, so they drift together and "half of them" ≈ "the series drifted". Fix a value *with a stated reason* **before any drift number has been looked at** — a threshold picked after seeing the data is not a threshold |
 
 A is settled. **Do not start Phase 6 with B and C open.** Both feed its done-criterion directly, and deciding
 them under time pressure at hour 60 of an 80-hour box is how a threshold ends up being whatever
@@ -59,13 +59,13 @@ Under-delivering against a stated target is a result. An unbounded finish is not
 
 ## Where this runs — a VPS, and Linux as a by-product
 
-From day one — September, not January — the project runs on a rented **x86-64 Linux VPS**
+From day one the project runs on a rented **x86-64 Linux VPS**
 (~€4/month), not the laptop. One evening to provision: create the instance, add an SSH key, disable root and password
 login, enable a firewall, install `tmux`.
 
-This is a **venue decision, not a new commitment.** Linux fluency is wanted and a separate
-"learn Linux" thread has been deliberately refused, because it would compete with the
-mathematics. It does not need to be a thread — the remaining phases *are* the curriculum:
+This is a **venue decision, not a new commitment.** Linux fluency is wanted, but a separate
+"learn Linux" track has been deliberately refused: it would compete for hours this project does
+not have. It does not need to be a track — the remaining phases *are* the curriculum:
 
 - **Phase 4 containerisation** meets the **ARM64 trap** immediately: the laptop is Apple
   Silicon, the VPS is x86-64, so an image built locally will not run there.
@@ -77,11 +77,11 @@ mathematics. It does not need to be a thread — the remaining phases *are* the 
 **Yield rule.** If Linux starts becoming the project rather than the venue, fall back to local
 Docker and finish the pipeline. The deliverable is the service; Linux is the by-product.
 
-**One more job for the same box.** A companion project needs `perf` profiling in summer 2027,
-and Apple Silicon does not expose hardware performance counters. This VPS is the obvious
-candidate — but cheap VPSs are KVM guests, where counters are often not exposed either. Run
-`perf stat -e cycles,instructions,cache-misses` on it **the day it exists**, ten months before it
-is needed. Ten minutes now, or an expensive surprise in July.
+**One more job for the same box.** A companion project will want `perf` profiling later, and
+Apple Silicon does not expose hardware performance counters. This VPS is the obvious candidate —
+but cheap VPSs are KVM guests, where counters are often not exposed either. Run
+`perf stat -e cycles,instructions,cache-misses` on it **the day it exists**, long before anything
+depends on the answer. Ten minutes now, or an expensive surprise on the day that work starts.
 
 ## Approach
 
@@ -294,7 +294,7 @@ the rejections I think were wrong."*
 > is free and perpetual, the phase has a genuine done-criterion, and it would make the Phase 7
 > performance view **always-on without a laptop awake** — which is presentation value, not
 > platform engineering. It is out of scope because it re-platforms a system that already works,
-> and 70–80 hours does not stretch to it. Revisit after the December finish as a *presentation*
+> and 70–80 hours does not stretch to it. Revisit once Phase 7 has closed, as a *presentation*
 > decision. Do not start it; do not delete it.
 Lift the working local system onto Databricks Free Edition (perpetual, free,
 serverless). The Phase 7 showcase becomes always-on: a scheduled Job runs
@@ -315,10 +315,11 @@ work through rather than just copy.
 ### Phase 9 — Experimentation & feature enrichment — **cut 2026-09-07**
 
 > **Cut, and this is the point of the cut.** The heading used to read *(ongoing)*. A phase with
-> no terminal state means the project has no terminal state, and this project needs one: it goes
-> on a CV in spring 2027 and gets pointed at in applications. What follows is not a phase of
-> building the system — it is what the finished system is *for*, kept here because that is worth
-> knowing and worth writing up. Nothing below is in scope for the December finish.
+> no terminal state means the project has no terminal state, and this project needs one: it is
+> written to be read by someone else, and a repo that never finishes never becomes evidence of
+> anything. What follows is not a phase of building the system — it is what the finished system
+> is *for*, kept here because that is worth knowing and worth writing up. Nothing below is in
+> scope for this build.
 This is the payoff of building everything above: improving the model is now a safe,
 instrumented loop. I can run a new model or new features as a challenger, let the
 promotion gate decide on merit, and watch live error. A worse idea simply never

@@ -13,8 +13,8 @@ retraining.
 **Phase 1 (ingestion) is implemented on the synthetic source**; the EIA path is still a stub.
 **Phase 2 (features, training) is in progress** — tests written, implementation pending.
 **Phase 3 (registry, serving) is open.** Phases 4–7 (containerise + CI, orchestration, drift monitoring with
-auto-retrain, live evaluation) are being finished **September–December 2026**, time-boxed at 70–80
-hours, run on a Linux VPS rather than a laptop. Phase 8 (cloud) is deferred; Phase 9 is cut, so the project
+auto-retrain, live evaluation) are the current work — time-boxed at 70–80 hours and run on a
+Linux VPS rather than a laptop. Phase 8 (cloud) is deferred; Phase 9 is cut, so the project
 has a finish line. Detail in [BUILD_PLAN.md](BUILD_PLAN.md).
 
 The list below is the system **as designed**, with the phase that builds each capability named —
@@ -73,7 +73,7 @@ Databricks.
 - **Model:** scikit-learn `HistGradientBoostingRegressor` — plain by design
 
 The local→cloud lift is a **planned** showcase rather than a built one — Phase 8 is deferred
-past the December finish (see `BUILD_PLAN.md`). The design intent stands: because the stack is OSS,
+past the current build (see `BUILD_PLAN.md`). The design intent stands: because the stack is OSS,
 migration is a matter of repointing infrastructure (MLflow tracking URI, registry, schedulers)
 rather than rebuilding, and the promotion-gate logic survives intact with only its mechanism
 changing (MLflow stages → Unity Catalog aliases).

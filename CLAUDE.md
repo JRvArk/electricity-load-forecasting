@@ -5,17 +5,35 @@ The human-facing learning guide and phase roadmap live in `BUILD_PLAN.md`.
 
 ## Status — read this before planning anything
 
-Parked 2026-09-01, **un-parked 2026-09-07**. **Phase 1 is implemented on the synthetic source** (the EIA retrieval path is a stub); **Phase 2
-is in progress** — tests written, `build.py` and `train.py` still stubs; **Phase 3 is open**. Phases 4–7 are being finished **September–December
-2026** at 6–12 hrs/wk — 70–80 hours time-boxed, run on an x86-64 Linux VPS rather than the laptop.
-**There is a real December deadline**: this is the artifact a December internship application would
-carry. **Phase 9 is
-cut** (it had no terminal state and this project needs one); **Phase 8 is deferred**, not
-dismissed. Reasoning and the stop rule are in `BUILD_PLAN.md`.
+Parked 2026-09-01, **un-parked 2026-09-07**. **Phase 1 is implemented on the synthetic source**
+(the EIA retrieval path is a stub); **Phase 2 is in progress** — tests written, `build.py` and
+`train.py` still stubs; **Phase 3 is open**. Phases 4–7 are the current work: **70–80 hours,
+time-boxed**, at 6–12 hrs/wk, run on an x86-64 Linux VPS rather than the laptop. **Finishing is a
+hard constraint** — scope that threatens it loses, every time. **Phase 9 is cut** (it had no
+terminal state and this project needs one); **Phase 8 is deferred**, not dismissed. Reasoning and
+the stop rule are in `BUILD_PLAN.md`.
 
 Two consequences for you. **Do not restore Phase 9 or fold it into 4–7**, and do not start
 Phase 8. And **do not add a Linux track, reading list or curriculum** — the phases are the
-curriculum, and a separate study thread has been explicitly refused.
+curriculum, and a separate learning track has been explicitly refused.
+
+## Repo boundary — everything here is addressed to a reader who has only this repo
+
+- **Motivation is argued in project terms.** Why a phase exists, why one was cut, why the box is
+  70–80 hours — justify it from what the system needs and what an unfinished system costs. Do not
+  import reasons from outside the repo: no career targets, employers, courses, or other planning
+  documents, and no naming of the places those live. If a reason cannot be stated in terms of this
+  codebase, it is not a reason this file should carry.
+- **No forward dates.** A date is allowed only as provenance on a decision already taken
+  (*"decided 2026-09-07"*). Everything else is expressed as budget, rate and ordering — "70–80
+  hours", "6–12 hrs/wk", "queued behind Phase 7" — which is what the plan actually needs in order
+  to be actionable, and which stays true when the calendar moves. Scheduling belongs to whatever
+  is doing the scheduling; this repo is not it.
+- **Sibling repos are referred to obliquely** — "a companion project" — and only where the point
+  genuinely needs them.
+
+This is a hygiene rule, not a secrecy one: a plan that reads as self-contained is a plan whose
+reasoning survives being read cold, by someone else or by you in a year.
 
 ## What this project is
 
