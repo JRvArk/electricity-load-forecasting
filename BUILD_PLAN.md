@@ -166,8 +166,8 @@ The upsert must overwrite on the timestamp key, not just skip-if-exists.
 >
 > It matters concretely. `build.py`'s no-leakage property reads *"every feature at time $t$ uses
 > only information available strictly before $t$"*, which is correct for a **one-step** model and
-> wrong otherwise. Phase 7 says *"at time $t$ I predict hours $t+1 \dots t+H$"*, and the EIA
-> baseline is `DF` — a **day-ahead** forecast, so $H \approx 24$. At $H = 24$, a lag-1 feature on
+> wrong otherwise. Phase 7 says *"at time $t$ I predict hours $t+1 \dots t+H$"*, and the
+> published baseline is a **day-ahead** forecast, so $H \approx 24$. At $H = 24$, a lag-1 feature on
 > the target timestamp needs the value at $t+23$, which does not exist when you predict. **`lags:
 > [1, 2, 3]` would be leakage**, and silently: the backtest would look excellent and live error
 > would not match it. Phase 7 exists to surface exactly that gap, which is a slow and expensive way
@@ -178,7 +178,7 @@ The upsert must overwrite on the timestamp key, not just skip-if-exists.
 > every horizon. The existing list `[1, 2, 3, 24, 48, 168]` therefore stays valid exactly as
 > written — nothing in it was wrong, only the frame it was read in.
 >
-> **$H = 24$**, matching the EIA day-ahead baseline and the README's "short-horizon" claim. It is
+> **$H = 24$**, matching the TSO's day-ahead forecast horizon and the README's "short-horizon" claim. It is
 > also the version that is a forecasting problem: at $H = 1$ hourly load is close to a persistence
 > problem and a seasonal-naive baseline is nearly unbeatable, so there would be nothing to
 > demonstrate.
@@ -307,15 +307,18 @@ those actuals only arrive later. Every prediction gets persisted (target timesta
 two and compute realized error. The rolling realized-error series, plotted against a
 baseline, is the performance-over-time showcase.
 
-**The baseline has to be source-agnostic, and EIA's `DF` is not.** `config.yaml` exposes
-`forecast_type: DF` under `source.eia` only, while `kind: synthetic` is the default and the source
-CI and tests must stay on. A phase whose headline deliverable only exists on live EIA data cannot be
-tested offline, which breaks hard convention 3. **Primary baseline: seasonal naive** — the value at
-$t-168\text{h}$, same hour last week. It needs no extra data, works on any source including
-synthetic, and is a genuinely hard baseline for hourly load. **Keep EIA's `DF` as a second baseline
-when `kind: eia`**, because beating a real published day-ahead forecast is the better story — it is
-just not the one the gate can depend on. This also surfaces the gap between backtest error
-(what `train.py` reports on a holdout) and live error on genuinely unseen hours.
+**The baseline has to be source-agnostic, and a published forecast is not.** `kind: synthetic` is
+the default and the source CI and tests must stay on; a phase whose headline deliverable only
+exists on live data cannot be tested offline, which breaks hard convention 3. **Primary baseline:
+seasonal naive** — the value at $t-168\text{h}$, same hour last week. It needs no extra data,
+works on any source including synthetic, and is a genuinely hard baseline for hourly load.
+**Secondary baseline, when `kind: entsoe`: the TSO's own published day-ahead load forecast**
+*(decided 2026-09-08 — it replaces a US-only source that offered the same series for one grid)*.
+Beating a transmission operator's forecast on its own zone is the strongest story the headline
+claim admits, and ENTSO-E publishes it for every European bidding zone through the same API as
+the actuals — it is just not the baseline the gate can depend on. **The write-up's headline is
+realised error against that forecast, by horizon.** This also surfaces the gap between backtest
+error (what `train.py` reports on a holdout) and live error on genuinely unseen hours.
 Target: a predictions table keyed by (target_ts, model_version) that joins to
 actuals to yield realized error.
 **Done when:** I can show realized error accumulating over time vs. the seasonal-naive baseline, on

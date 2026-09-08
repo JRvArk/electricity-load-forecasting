@@ -30,25 +30,16 @@ class SyntheticCfg(BaseModel):
     seed: int
 
 
-class EiaCfg(BaseModel):
-    api_key_env: str
-    base_url: str
-    route: str
-    respondent: str
-    demand_type: str
-    forecast_type: str
-
-
 class EntsoeCfg(BaseModel):
     api_token_env: str
     area_code: str
+    include_tso_forecast: bool = True
 
 
 class SourceCfg(BaseModel):
     kind: str
-    source_cfg: SyntheticCfg | EiaCfg | EntsoeCfg
+    source_cfg: SyntheticCfg | EntsoeCfg
     # synthetic: SyntheticCfg
-    # eia: EiaCfg
     # entsoe: EntsoeCfg
 
 

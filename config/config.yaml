@@ -10,7 +10,7 @@ domain:
 source:
   # kind: "synthetic" runs the entire pipeline with zero external dependencies.
   # KEEP IT as the default for dev, tests, and CI — they must stay offline and
-  # deterministic. Flip to "eia" for live runs against real data.
+  # deterministic. Flip to "entsoe" for live runs against real data.
   kind: synthetic
   synthetic:
     base_load: 12000.0       # mean level
@@ -18,19 +18,15 @@ source:
     weekly_amplitude: 1500.0 # weekday/weekend swing
     noise_sd: 400.0
     seed: 7
-  eia:
-    # US Energy Information Administration, open data API v2. Free instant key:
-    # register at https://www.eia.gov/opendata/ and export EIA_API_KEY.
-    api_key_env: EIA_API_KEY
-    base_url: https://api.eia.gov/v2
-    route: electricity/rto/region-data/data   # hourly demand by balancing authority
-    respondent: PJM           # BA code: PJM, CISO, MISO, ERCO, NYIS, ...
-    demand_type: D            # D  = actual demand (your target)
-    forecast_type: DF         # DF = day-ahead demand forecast (your baseline to beat)
   entsoe:
-    # alternative: European/Dutch grid. Free token but ~3 working-day email wait.
+    # ENTSO-E Transparency Platform — the live source (decided 2026-09-08). One
+    # REST API publishes both "Actual Total Load" and the TSO's own "Day-ahead
+    # Total Load Forecast" per bidding zone; the forecast is Phase 7's secondary
+    # baseline. Token is free: register, then request RESTful API access by
+    # email (~3 working days). Export it as ENTSOE_TOKEN.
     api_token_env: ENTSOE_TOKEN
-    area_code: "10YNL----------L"   # Netherlands
+    area_code: "10YNL----------L"   # bidding zone; NL's TSO is TenneT
+    include_tso_forecast: true      # also land the TSO day-ahead forecast column
 
 storage:
   duckdb_path: data/forecast.duckdb
@@ -45,16 +41,15 @@ features:
   lags: [1, 2, 3, 24, 48, 168]       # hours
   rolling_windows: [24, 168]         # hours
   calendar: true
-  # NOTE: must match the source's geography. NL pairs with the entsoe block;
-  # the eia block defaults to respondent PJM, which is a US grid — flipping
-  # source.kind to eia without changing this applies Dutch holidays to US load,
-  # which degrades the model silently rather than failing.
+  # NOTE: must match the source's geography — the bidding zone's country. NL
+  # pairs with area_code 10YNL----------L. Changing the zone without changing
+  # this applies the wrong calendar silently rather than failing.
   holidays_country: NL
 
 training:
   # Predict t+1 .. t+horizon_hours from information available at t. Horizon is a
   # feature, so one model spans all horizons rather than 24 separate models.
-  horizon_hours: 24                  # day-ahead, matching the EIA DF baseline
+  horizon_hours: 24                  # day-ahead, matching the TSO forecast's horizon
   model: hist_gradient_boosting
   test_horizon_hours: 168            # last week held out
   primary_metric: mae                # lower is better

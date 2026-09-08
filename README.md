@@ -10,7 +10,7 @@ retraining.
 
 ## Status
 
-**Phase 1 (ingestion) is implemented on the synthetic source**; the EIA path is still a stub.
+**Phase 1 (ingestion) is implemented on the synthetic source**; the live ENTSO-E path is a stub.
 **Phase 2 (features, training) is stubs** — every function body in `build.py` is `pass`, and its
 tests are about a third written. **Phase 3 (registry, serving) is open.** Phases 4–7 are
 unstarted. The remaining work is time-boxed and runs on a Linux VPS rather than a laptop, built in
@@ -24,7 +24,7 @@ so it is clear what runs today and what does not.
 
 ## What it does
 
-- **Idempotent ingestion** *(Phase 1, synthetic source implemented; EIA path stubbed)* — hourly observations land in DuckDB via upsert on the
+- **Idempotent ingestion** *(Phase 1, synthetic source implemented; ENTSO-E path stubbed)* — hourly observations land in DuckDB via upsert on the
   timestamp key. Re-running a backfill never duplicates or corrupts rows, and late
   upstream revisions overwrite cleanly.
 - **Reproducible training** *(Phase 2, stubs)* — every model is produced by a tracked MLflow run with
@@ -40,8 +40,8 @@ so it is clear what runs today and what does not.
 - **Drift monitoring + auto-retrain** *(Phase 6, unstarted — inside the box if hours remain)* — Evidently watches data and prediction drift
   on a rolling window and fires a retrain when drift crosses a configured threshold.
 - **Live evaluation** *(Phase 7, unstarted)* — every prediction is persisted and joined to actuals as they
-  arrive, producing a realized-error series tracked over time against a day-ahead
-  baseline.
+  arrive, producing a realized-error series by horizon against a seasonal-naive baseline —
+  and, on live data, against the transmission operator's own published day-ahead forecast.
 
 ## Architecture
 
@@ -71,7 +71,8 @@ Databricks.
 | Orchestration | systemd timers | Databricks Jobs / Workflows |
 | Monitoring | Evidently | runs in a Job (or Lakehouse Monitoring) |
 
-- **Data:** synthetic generator (default, offline) | EIA open-data API v2 (live)
+- **Data:** synthetic generator (default, offline) | ENTSO-E Transparency Platform (live) — actual
+  load plus the TSO's day-ahead forecast, per bidding zone
 - **Model:** scikit-learn `HistGradientBoostingRegressor` — plain by design
 
 The local→cloud lift is a **planned** showcase rather than a built one — Phase 8 is deferred
@@ -85,7 +86,7 @@ changing (MLflow stages → Unity Catalog aliases).
 Dataset choice lives in `config/config.yaml` alone — no module hardcodes
 "electricity". The default source is a synthetic generator, so the entire system
 runs with zero external dependencies (and tests/CI stay offline and deterministic).
-Real data via the EIA open-data API (`source.kind: eia`) is opt-in for live runs.
+Real data via the ENTSO-E Transparency Platform (`source.kind: entsoe`) is opt-in for live runs.
 
 ## Run it
 

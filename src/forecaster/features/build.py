@@ -17,7 +17,8 @@ Target properties (write tests for these first)
       period for the largest lag/window) are dropped.
     - Predictor set is well-defined: a caller can ask which columns are predictors
       (everything except the timestamp and target).
-    - Calendar + holiday features reflect the configured country.
+    - Calendar + holiday features reflect the configured country — the bidding
+      zone's, when the source is ENTSO-E.
 
 Done criterion (shared with Phase 2 training)
     Two tracked training runs are visible and comparable in the MLflow UI.

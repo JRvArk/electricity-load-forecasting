@@ -71,7 +71,28 @@ def _create_synthetic_data(
     )
 
 
-def _retrieve_eia_data(backfill_days: int, api_key: str) -> pd.DataFrame:
+def _retrieve_entsoe_data(
+    backfill_days: int, api_token_env: str, area_code: str, include_tso_forecast: bool
+) -> pd.DataFrame:
+    """Pull hourly actual load for one bidding zone from the ENTSO-E Transparency
+    Platform, optionally alongside the TSO's own day-ahead load forecast.
+
+    Target properties (write tests for these first)
+        - Returns the same raw schema as the synthetic source — the configured
+          timestamp and target columns, hourly, strictly increasing, no duplicates
+          — so the raw table's shape does not depend on the source. That property
+          is what keeps everything downstream source-agnostic.
+        - When ``include_tso_forecast`` is set, one extra column ``tso_forecast``
+          carries the TSO's published day-ahead forecast for the same timestamp.
+          It is a Phase 7 baseline, never a feature: it is not known at the
+          forecast origin for the horizons it covers.
+        - Backfill over ``backfill_days``. Some zones publish quarter-hourly;
+          resample to the configured frequency.
+        - Retry with backoff around the network call (a Phase 5 requirement).
+
+    ``api_token_env`` is the name of the environment variable holding the token;
+    read it here, never log it. Human implements.
+    """
     pass
 
 
@@ -83,8 +104,13 @@ def load_data(cfg: Config, backfill_days: int) -> pd.DataFrame:
             timestamp_column_name=cfg.domain.timestamp_column,
             target_column_name=cfg.domain.target_column,
         )
-    elif cfg.source.kind == "eia":
-        return _retrieve_eia_data(backfill_days, cfg.source.source_cfg.api_key_env)
+    elif cfg.source.kind == "entsoe":
+        return _retrieve_entsoe_data(
+            backfill_days,
+            api_token_env=cfg.source.source_cfg.api_token_env,
+            area_code=cfg.source.source_cfg.area_code,
+            include_tso_forecast=cfg.source.source_cfg.include_tso_forecast,
+        )
     else:
         raise ValueError(f"Unknown source: {cfg.source.kind}")
 
