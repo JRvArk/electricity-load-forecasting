@@ -88,6 +88,13 @@ Dataset choice lives in `config/config.yaml` alone — no module hardcodes
 runs with zero external dependencies (and tests/CI stay offline and deterministic).
 Real data via the ENTSO-E Transparency Platform (`source.kind: entsoe`) is opt-in for live runs.
 
+## How this was built
+
+*Filled in at the write-up, when the finish line lands.* What was hand-written, what was
+delegated, and how the delegated parts were verified — tests written first, implementation
+reviewed against them. A reader evaluating the code should know which parts the author can
+defend line by line; the split itself is in `BUILD_PLAN.md`, *Hand-written or delegated*.
+
 ## Run it
 
 Each command works once the corresponding phase is implemented (see `BUILD_PLAN.md`).
