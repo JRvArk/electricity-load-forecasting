@@ -17,8 +17,8 @@ from a service is still to be written, and that gap is the whole subject of the 
   low-intensity slot deliberately: what remains is implementation against interfaces that are
   already fixed, and that survives being picked up and put down in six-hour weeks. Open-ended
   exploratory work does not, and is queued behind it in a block of its own.
-- **Budget:** **70–80 hours, time-boxed** — 7–13 weeks at that rate, so the rate is not the
-  binding constraint.
+- **Budget:** **~95 hours, time-boxed** — 8–16 weeks at that rate against a twelve-week term,
+  so the rate is close to binding. That is why the hand-written / delegated split below exists.
 - **The finish comes first, and it is a real constraint.** A running system reads very
   differently from a half-built one, and this is the repo a reader actually clicks. Completion
   beats extension everywhere below: nothing here is worth being unfinished for.
@@ -30,12 +30,14 @@ from a service is still to be written, and that gap is the whole subject of the 
 
 ### The time box, fixed before starting
 
-70–80 hours across the remaining phases, set **in advance**. The number is a judgement, not a
-researched estimate — its entire value is that it was fixed before the work began.
+**~95 hours** across the remaining phases, set **in advance**. The number is a judgement, not a
+researched estimate — its entire value is that it was fixed before the work began. *(Re-based
+2026-09-08 from 70–80: the earlier figure rested on a status claim the source did not support,
+and its split omitted Phase 2 entirely, which is all stubs.)*
 
 **Split, fixed in advance** — so an overrun is visible while there is still time to act on it,
-rather than at the finish with nothing left to cut: Phase 3 close-out ~20, Phase 4 ~10,
-Phase 5 ~15, Phase 6 ~20, Phase 7 ~15.
+rather than at the finish with nothing left to cut: Phase 2 ~20 · Phase 3 ~20 · Phase 5 ~15 ·
+Phase 7 ~15 · Phase 4 ~5 · Phase 6 ~20.
 The shape matters more than the numbers: Phases 6 and 7 carry the most unknowns and the least
 reference material, and Phase 4 is the one that is mostly configuration.
 
@@ -53,7 +55,7 @@ easier to decide now than to discover mid-phase, and two of them gate a phase's 
 | **C** | **`drift_threshold` value and its basis** | **Phase 6** | 0.5 is a placeholder. Most features here are transforms of one series, so they drift together and "half of them" ≈ "the series drifted". Fix a value *with a stated reason* **before any drift number has been looked at** — a threshold picked after seeing the data is not a threshold |
 
 A is settled. **Do not start Phase 6 with B and C open.** Both feed its done-criterion directly, and deciding
-them under time pressure at hour 60 of an 80-hour box is how a threshold ends up being whatever
+them under time pressure at hour 80 of a 95-hour box is how a threshold ends up being whatever
 made the test pass.
 Under-delivering against a stated target is a result. An unbounded finish is not.
 
