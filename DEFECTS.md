@@ -135,6 +135,54 @@ property the convention exists to protect.
 
 **Fix:** use the fixture.
 
+### D17 — The two source functions do not share a contract
+**Blocks:** running on `kind: entsoe` at all, and the Phase 1 done-criterion on the live source.
+
+`_create_synthetic_data` is passed `timestamp_column_name` and `target_column_name` and builds a
+frame to fit. `_retrieve_entsoe_data` is passed neither, and returns entsoe-py's native frame: the
+timestamp in the **index** rather than a column, one value column named after each area code, and
+`{area}_tso_forecast` where the docstring above it promises a single `tso_forecast`. Nothing in
+that signature is aware that a raw schema exists, so nothing in it can conform to one.
+
+The mismatch surfaces two functions later. `store_data` inserts positionally, so the first DOUBLE
+column is cast into `ts`:
+
+```
+Conversion Error: Unimplemented type for cast (DOUBLE -> TIMESTAMP WITH TIME ZONE)
+                  when casting from source column 10YNL----------L
+```
+
+which names neither the missing column nor the function that owed it. Source-independent schema is
+the property Phase 1 exists to establish; it currently holds only because one source has been run.
+
+**Fix:** one signature for every source — the configured column names reach each one, whether as
+arguments or as the whole `Config` — and one shared conformance assertion (columns are exactly the
+configured timestamp and target, tz-aware, hourly, strictly increasing, no duplicates) applied to
+each source in turn. The assertion is the part that keeps a third source from drifting the same
+way; for a live source it runs against a recorded frame, so CI stays offline.
+
+### D18 — A frame without the timestamp column truncates the raw table instead of failing
+**Blocks:** hard convention 1, and any history Phase 7 accumulates.
+
+`store_data`'s upsert reads:
+
+```sql
+DELETE FROM <table> WHERE <ts> IN(SELECT <ts> FROM incoming)
+```
+
+When `incoming` has no such column, the inner `<ts>` does not fail to resolve — DuckDB binds it to
+the **outer** table's column as a correlated reference. The subquery then yields the current row's
+own timestamp, the predicate is true for every row, and the statement deletes the entire table
+without raising. Observed: the raw table went from 72 rows to 0 on the first `kind: entsoe` run,
+before the INSERT in D17 errored.
+
+This is the corrupt-state half of convention 1 arriving by a different route than D6, and it is
+worse than a crash: the job reports the INSERT's error while the DELETE has already succeeded.
+
+**Fix:** qualify the subquery's column (`incoming.<ts>`), so a frame missing it is a binder error
+rather than a truncation, and pin it with a test that calls `store_data` with a frame that lacks
+the timestamp column.
+
 ---
 
 ## Phase 2 — Features + training

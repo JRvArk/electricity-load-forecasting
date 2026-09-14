@@ -91,8 +91,9 @@ easier to decide now than to discover mid-phase, and two of them gate a phase's 
 | ~~**A**~~ | ~~Forecast horizon and lag frame~~ — **decided 2026-09-07: $H = 24$, lags from the forecast origin** | ~~Phase 2~~ | Settled. Reasoning in the Phase 2 box |
 | **B** | **Loop-termination mechanism** — cooldown, drift acknowledgement, or escalation after *k* rejections | **Phase 6** | Phase 6's done-criterion now requires that a persistently drifted store stops retraining. Without a choice there is no criterion to test |
 | **C** | **`drift_threshold` value and its basis** | **Phase 6** | 0.5 is a placeholder. Most features here are transforms of one series, so they drift together and "half of them" ≈ "the series drifted". Fix a value *with a stated reason* **before any drift number has been looked at** — a threshold picked after seeing the data is not a threshold |
+| **D** | **Source plurality, and whether ingestion splits into a `sources/` package** — one bidding zone or several, and one module per source behind a registry or the present single file | **Phase 1**, and the raw schema every later phase reads | `area_codes` is already `str \| list[str]`, and the answer decides the raw table's shape: one zone keeps the present two columns, several make it long — a zone key in the raw table, in the feature table, in the model's inputs and in the serving request. Phase 2 builds on that shape and Phase 7 joins against it, so deciding it later means migrating a populated database. The package split is the cheap half and only pays from a third source on; the plurality question is the one that cannot be deferred |
 
-A is settled. **Do not start Phase 6 with B and C open.** Both feed its done-criterion directly, and deciding
+A is settled. **Do not start Phase 6 with B and C open.** D gates Phase 1's remaining work; see `DEFECTS.md` D17 and D18, which are due in the same pass. Both feed its done-criterion directly, and deciding
 them under time pressure at hour 80 of a 95-hour box is how a threshold ends up being whatever
 made the test pass.
 Under-delivering against a stated target is a result. An unbounded finish is not.
