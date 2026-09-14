@@ -8,13 +8,19 @@ Values arrive in three layers, in increasing precedence:
 1. **The file** — shape and defaults: columns, feature spec, horizon, thresholds.
    Identical in every environment, because a model trained against a different
    feature spec is not comparable to the incumbent it is meant to beat.
-2. **The environment** — the few values that genuinely differ between a laptop, a
+2. **A local overlay** — `config/local.yaml`, gitignored and optional, deep-merged
+   over the file when it exists. This is where a working copy says "same system,
+   but pointed at the live source", without editing a tracked file that everyone
+   else and CI also read. It is inert exactly where it must be: being gitignored,
+   it does not exist in a fresh clone, so it cannot make CI reach the network.
+3. **The environment** — the few values that genuinely differ between a laptop, a
    container and a scheduled unit: where the database is, where MLflow is. See
    `_ENV_OVERRIDES`; the list is deliberately short, and *what the system is* is
-   not on it. A run that wants a different source wants a different config file.
-3. **The caller** — `load_config(path=...)`, or `$FORECASTER_CONFIG`, for a
-   config chosen explicitly. This is the route for "the same code against a
-   different system": it names the whole config rather than mutating one key.
+   not on it — an environment variable can be set by a parent process, so it is
+   the wrong place for anything that changes what the run means.
+4. **The caller** — `load_config(path=...)`, or `$FORECASTER_CONFIG`, naming a
+   config explicitly. Naming a file means meaning it, so an explicit config
+   **skips the overlay** rather than being merged with someone's local state.
 
 Secrets are in none of them: config carries the *name* of the variable holding a
 credential, never the credential, so no dump of this object can leak one.
@@ -54,6 +60,8 @@ _ENV_OVERRIDES: dict[str, tuple[str, ...]] = {
 
 #: The checkout layout: <repo>/config/config.yaml, a sibling of src/.
 _DEFAULT_CONFIG_PATH = Path(__file__).resolve().parents[2] / "config" / "config.yaml"
+#: An optional, gitignored overlay beside the config it modifies.
+_LOCAL_OVERLAY_NAME = "local.yaml"
 #: The copy built into the wheel, for installs that are not a checkout.
 _PACKAGED_CONFIG_NAME = "_default_config.yaml"
 
@@ -225,10 +233,38 @@ class Config(BaseModel):
     #: The file this object was loaded from. Provenance, so a run can report
     #: which config produced it rather than which config was expected.
     config_path: Path | None = None
+    #: The overlay merged over `config_path`, when one applied. Recorded so a run
+    #: says it was in play, rather than leaving someone to wonder why the numbers
+    #: moved on one machine and not another.
+    config_overlay: Path | None = None
 
     def abs_path(self, relative: str) -> Path:
         """Resolve a config-relative path against the project root."""
         return (self.project_root / relative).resolve()
+
+
+def _overlay_for(cfg_path: Path) -> Path | None:
+    """The local overlay beside `cfg_path`, if the working copy has one."""
+    candidate = cfg_path.parent / _LOCAL_OVERLAY_NAME
+    return candidate if candidate.is_file() else None
+
+
+def _deep_merge(base: dict, over: dict) -> dict:
+    """Merge `over` into a copy of `base`.
+
+    Mappings merge key by key, so an overlay naming `source.kind` does not take
+    the sibling source blocks with it. Everything else — scalars, and lists —
+    replaces wholesale: a merged list is never what anyone meant, and a config
+    whose lists half-merge is worse than one that cannot express the change.
+    """
+    merged = dict(base)
+    for key, value in over.items():
+        current = merged.get(key)
+        if isinstance(current, dict) and isinstance(value, dict):
+            merged[key] = _deep_merge(current, value)
+        else:
+            merged[key] = value
+    return merged
 
 
 def _apply_env_overrides(raw: dict) -> None:
@@ -275,35 +311,53 @@ def _env_snapshot() -> tuple[tuple[str, str], ...]:
 @lru_cache(maxsize=8)
 def _load_config_cached(
     cfg_path: Path,
+    overlay_path: Path | None,
     _mtime_ns: int,
+    _overlay_mtime_ns: int,
     _env: tuple[tuple[str, str], ...],
 ) -> Config:
     """Do not delete the unread parameters.
 
-    `_mtime_ns` and `_env` are never read in this body. They are here to be part
-    of `lru_cache`'s key: the cached object must be invalidated when the file
-    changes on disk or when an override in the environment changes, and the key
-    is the only place that can express it. Drop them and the cache returns a
-    config that is stale against its own file — which is the defect this
-    replaced, and it fails silently.
+    `_mtime_ns`, `_overlay_mtime_ns` and `_env` are never read in this body. They
+    are here to be part of `lru_cache`'s key: the cached object must be
+    invalidated when either file changes on disk or when an override in the
+    environment changes, and the key is the only place that can express it. Drop
+    them and the cache returns a config that is stale against its own file —
+    which is the defect this replaced, and it fails silently.
     """
     with cfg_path.open("r", encoding="utf-8") as fh:
         raw = yaml.safe_load(fh)
+    if overlay_path is not None:
+        with overlay_path.open("r", encoding="utf-8") as fh:
+            raw = _deep_merge(raw, yaml.safe_load(fh) or {})
+        logger.info("config: overlay applied from %s", overlay_path)
     _apply_env_overrides(raw)
     raw.setdefault("project_root", _project_root_for(cfg_path))
     raw.setdefault("config_path", cfg_path)
+    raw.setdefault("config_overlay", overlay_path)
     return Config(**raw)
 
 
 def load_config(path: str | Path | None = None) -> Config:
     """Load and validate the config, applying environment overrides.
 
-    Cached on the file's path and modification time, so editing the file between
+    Cached on each file's path and modification time, so editing either between
     calls returns the edited config rather than a stale object — and on the
     environment, so a test that sets an override sees it.
+
+    A config named explicitly, by argument or by `$FORECASTER_CONFIG`, is loaded
+    as given: no overlay is merged over it.
     """
+    named = path is not None or ENV_CONFIG_PATH in os.environ
     cfg_path = Path(path).expanduser().resolve() if path else default_config_path()
-    return _load_config_cached(cfg_path, cfg_path.stat().st_mtime_ns, _env_snapshot())
+    overlay = None if named else _overlay_for(cfg_path)
+    return _load_config_cached(
+        cfg_path,
+        overlay,
+        cfg_path.stat().st_mtime_ns,
+        overlay.stat().st_mtime_ns if overlay else 0,
+        _env_snapshot(),
+    )
 
 
 load_config.cache_clear = _load_config_cached.cache_clear  # type: ignore[attr-defined]

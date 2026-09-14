@@ -9,3 +9,9 @@ mlruns/
 reference/
 .claude/
 .DS_Store
+
+#secrets
+secrets/
+
+# local config overlay: same system, pointed somewhere else
+config/local.yaml
