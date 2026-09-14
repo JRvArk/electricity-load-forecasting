@@ -9,9 +9,12 @@ Values arrive in three layers, in increasing precedence:
    Identical in every environment, because a model trained against a different
    feature spec is not comparable to the incumbent it is meant to beat.
 2. **The environment** — the few values that genuinely differ between a laptop, a
-   container and a scheduled unit: where the database is, where MLflow is, which
-   source to run. See `_ENV_OVERRIDES`; the list is deliberately short.
-3. **The caller** — `load_config(path=...)` for a config file chosen explicitly.
+   container and a scheduled unit: where the database is, where MLflow is. See
+   `_ENV_OVERRIDES`; the list is deliberately short, and *what the system is* is
+   not on it. A run that wants a different source wants a different config file.
+3. **The caller** — `load_config(path=...)`, or `$FORECASTER_CONFIG`, for a
+   config chosen explicitly. This is the route for "the same code against a
+   different system": it names the whole config rather than mutating one key.
 
 Secrets are in none of them: config carries the *name* of the variable holding a
 credential, never the credential, so no dump of this object can leak one.
@@ -39,10 +42,14 @@ ENV_PROJECT_ROOT = "FORECASTER_PROJECT_ROOT"
 #: The only keys the environment may override, mapped to their path in the
 #: config tree. Kept short on purpose: a config where anything can be overridden
 #: from the environment is a config you can no longer read to know what ran.
+#:
+#: Both entries below are the same system on a different machine. `source.kind`
+#: is deliberately absent — it is what the system *is*, and an environment that
+#: could flip it could turn an offline test run into a live one from outside the
+#: repo, silently, against hard convention 3. Use `$FORECASTER_CONFIG` instead.
 _ENV_OVERRIDES: dict[str, tuple[str, ...]] = {
     "FORECASTER_DUCKDB_PATH": ("storage", "duckdb_path"),
     "FORECASTER_MLFLOW_TRACKING_URI": ("mlflow", "tracking_uri"),
-    "FORECASTER_SOURCE_KIND": ("source", "kind"),
 }
 
 #: The checkout layout: <repo>/config/config.yaml, a sibling of src/.

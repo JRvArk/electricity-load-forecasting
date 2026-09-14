@@ -83,19 +83,26 @@ README's *How this was built* section is for.
 
 ### Open decisions — resolve before the phase they gate
 
-Nothing here is hard, and all three are cheap to settle. They are listed because each one is
-easier to decide now than to discover mid-phase, and two of them gate a phase's done-criterion.
+The decision register. Open decisions are in bold; settled ones are struck through and carry the
+date they were taken, so the basis survives next to the choice rather than only in the commit that
+acted on it. Nothing here is hard. They are listed because each one is easier to decide now than to
+discover mid-phase, and the open two gate a phase's done-criterion.
 
 | # | Decision | Gates | Why it cannot be deferred into the phase |
 |---|---|---|---|
 | ~~**A**~~ | ~~Forecast horizon and lag frame~~ — **decided 2026-09-07: $H = 24$, lags from the forecast origin** | ~~Phase 2~~ | Settled. Reasoning in the Phase 2 box |
 | **B** | **Loop-termination mechanism** — cooldown, drift acknowledgement, or escalation after *k* rejections | **Phase 6** | Phase 6's done-criterion now requires that a persistently drifted store stops retraining. Without a choice there is no criterion to test |
 | **C** | **`drift_threshold` value and its basis** | **Phase 6** | 0.5 is a placeholder. Most features here are transforms of one series, so they drift together and "half of them" ≈ "the series drifted". Fix a value *with a stated reason* **before any drift number has been looked at** — a threshold picked after seeing the data is not a threshold |
-| **D** | **Source plurality, and whether ingestion splits into a `sources/` package** — one bidding zone or several, and one module per source behind a registry or the present single file | **Phase 1**, and the raw schema every later phase reads | `area_codes` is already `str \| list[str]`, and the answer decides the raw table's shape: one zone keeps the present two columns, several make it long — a zone key in the raw table, in the feature table, in the model's inputs and in the serving request. Phase 2 builds on that shape and Phase 7 joins against it, so deciding it later means migrating a populated database. The package split is the cheap half and only pays from a third source on; the plurality question is the one that cannot be deferred |
+| ~~**D**~~ | ~~Source plurality, and whether ingestion splits into a `sources/` package~~ — **decided 2026-09-14: several zones, long schema, entity-aware from the start; the `sources/` split proceeds** | ~~Phase 1~~ | Settled. The raw table is long — one row per (timestamp, series), with `domain.entity_column` naming the key — so adding a zone adds rows and never columns. Chosen over deferring the modelling half because the churn is in the interfaces, not the migration: a `build.py` written for one series is a rewrite when it grows a `groupby`, a serving contract is worse to change once Phase 7 joins against it, and a model trained without the entity feature is not comparable to one trained with it, which makes the promotion gate meaningless. Fixtures must carry at least two entities or none of it is exercised |
+| ~~**E**~~ | ~~Ingestion's run window~~ — **decided 2026-09-14: `[start, end)` is the primitive, `--backfill-days N` is sugar over it** | ~~Phase 1~~, and every scheduled invocation in Phase 5 | Settled. Phase 1 states the property as *populate an arbitrary `[start, end)` range*, and a days-before-now argument cannot express it — which is exactly the case the done-criterion is built around, re-ingesting a window whose values were revised after publication. The sugar resolves to `end` = now floored to the hour; the two forms are mutually exclusive; `IngestResult` records the resolved window alongside the realised extent, because the gap between requested and landed is the missing-hours signal Phase 7 reads |
+| ~~**F**~~ | ~~What the environment may override~~ — **decided 2026-09-14: per-environment values only; `source.kind` is not overridable** | ~~convention 3~~, and CI | Settled. `FORECASTER_DUCKDB_PATH` and `FORECASTER_MLFLOW_TRACKING_URI` are the same system on a different machine. `source.kind` is what the system *is*: an environment able to flip it could turn an offline test run into a live one from outside the repo, silently, which is the failure convention 3 exists to prevent. A run that wants a different source wants a different config — `$FORECASTER_CONFIG` already names one |
 
-A is settled. **Do not start Phase 6 with B and C open.** D gates Phase 1's remaining work; see `DEFECTS.md` D17 and D18, which are due in the same pass. Both feed its done-criterion directly, and deciding
-them under time pressure at hour 80 of a 95-hour box is how a threshold ends up being whatever
-made the test pass.
+B and C remain open. **Do not start Phase 6 with either of them open**: both feed its
+done-criterion directly, and deciding them under time pressure at hour 80 of a 95-hour box is how a
+threshold ends up being whatever made the test pass.
+
+D, E and F are settled and have work outstanding rather than questions — see `DEFECTS.md` D17 and
+D18, which are due in the same pass as D.
 Under-delivering against a stated target is a result. An unbounded finish is not.
 
 ## Where this runs — a VPS, and Linux as a by-product
