@@ -114,16 +114,15 @@ state**", and this is the corrupt-state half.
 
 **Fix:** wrap the delete and the insert in one transaction.
 
-### D7 — `load_config` caches across content changes, and resolves the root from the default path
-**Blocks:** test isolation.
+### ~~D7 — `load_config` caches across content changes, and resolves the root from the default path~~
+**Fixed** in `8b60f21`. `@lru_cache` keyed on the path argument alone, so a config whose *contents*
+changed between calls returned the stale object; and `project_root` was always derived from
+`_DEFAULT_CONFIG_PATH`, so a config loaded from anywhere else resolved its relative paths against
+the real repo root — wrong for exactly the case a temporary config exists to create.
 
-`@lru_cache` keys on the path argument, so a config whose *contents* change between calls returns
-the stale object. Separately, `project_root` is always derived from `_DEFAULT_CONFIG_PATH`, so a
-config loaded from somewhere else still resolves its relative paths against the real repo root —
-which makes `abs_path` wrong for exactly the case a temporary config exists to create.
-
-**Fix:** derive `project_root` from the path actually loaded, and give the loader a way to bypass
-or clear the cache.
+The cache is now keyed on the file's modification time and on the overriding environment as well as
+the path, `project_root` derives from the file actually loaded, and `load_config.cache_clear()`
+remains available. The unread parameters that carry the key are `REVISIT.md` R1.
 
 ### D8 — The tests hardcode the domain
 **Blocks:** nothing; it is the convention applied to its own tests.
