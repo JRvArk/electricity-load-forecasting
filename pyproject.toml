@@ -32,6 +32,11 @@ build-backend = "hatchling.build"
 [tool.hatch.build.targets.wheel]
 packages = ["src/forecaster"]
 
+# The default config ships inside the package, so an install that is not a
+# checkout still has one. The checkout's config/config.yaml wins when present.
+[tool.hatch.build.targets.wheel.force-include]
+"config/config.yaml" = "forecaster/_default_config.yaml"
+
 [tool.ruff]
 line-length = 120
 target-version = "py311"

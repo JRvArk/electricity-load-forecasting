@@ -5,6 +5,7 @@ domain:
   name: electricity_load
   target_column: load_mw
   timestamp_column: ts
+  entity_column: series_id   # long schema: one row per (timestamp, series)
   frequency: "1h"
 
 source:
@@ -13,6 +14,7 @@ source:
   # deterministic. Flip to "entsoe" for live runs against real data.
   kind: synthetic
   synthetic:
+    entity_ids: ["synthetic_1", "synthetic_2"] # Need minimal two for proper testing
     base_load: 12000.0       # mean level
     daily_amplitude: 3000.0  # peak-to-trough daily swing
     weekly_amplitude: 1500.0 # weekday/weekend swing
@@ -24,13 +26,14 @@ source:
     # Total Load Forecast" per bidding zone; the forecast is Phase 7's secondary
     # baseline. Token is free: register, then request RESTful API access by
     # email (~3 working days). Export it as ENTSOE_TOKEN.
-    api_token_env: ENTSOE_TOKEN
-    area_code: "10YNL----------L"   # bidding zone; NL's TSO is TenneT
+    api_key_env: ENTSOE_TOKEN           # the variable's NAME; never the key itself
+    entity_ids: ["10YNL----------L"]    # bidding zones; NL's TSO is TenneT
     include_tso_forecast: true      # also land the TSO day-ahead forecast column
 
 storage:
   duckdb_path: data/forecast.duckdb
   raw_table: raw_observations
+  raw_tso_table: raw_tso_forecast
   feature_table: features
 
 features:
