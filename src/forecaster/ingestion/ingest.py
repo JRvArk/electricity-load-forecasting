@@ -34,8 +34,11 @@ import logging
 import duckdb
 import numpy as np
 import pandas as pd
+from pathlib import Path
+import yaml
+from entsoe import EntsoePandasClient
 
-from forecaster.config import Config, SyntheticCfg, load_config  # noqa: F401  — you'll need these
+from forecaster.config import Config, SyntheticCfg, EntsoeCfg, load_config  # noqa: F401  — you'll need these
 from forecaster.ingestion.ingest_result import IngestResult
 
 logger = logging.getLogger(__name__)
@@ -47,14 +50,10 @@ def _create_synthetic_data(
     timestamp_column_name: str,
     target_column_name: str,
 ) -> pd.DataFrame:
-    last_hour = datetime.datetime.now(datetime.timezone.utc).replace(
-        minute=0, second=0, microsecond=0
-    )
+    last_hour = datetime.datetime.now(datetime.timezone.utc).replace(minute=0, second=0, microsecond=0)
     start_time = last_hour - datetime.timedelta(days=backfill_days)
     end_time = last_hour
-    timestamps = pd.date_range(
-        start=start_time, end=end_time, freq="1h", inclusive="left", tz="UTC"
-    )
+    timestamps = pd.date_range(start=start_time, end=end_time, freq="1h", inclusive="left", tz="UTC")
     hours = np.arange(len(timestamps))
     rng = np.random.default_rng(synthetic_cfg.seed)
 
@@ -72,7 +71,7 @@ def _create_synthetic_data(
 
 
 def _retrieve_entsoe_data(
-    backfill_days: int, api_token_env: str, area_code: str, include_tso_forecast: bool
+    backfill_days: int, api_key: str, area_codes: str | list[str], include_tso_forecast: bool
 ) -> pd.DataFrame:
     """Pull hourly actual load for one bidding zone from the ENTSO-E Transparency
     Platform, optionally alongside the TSO's own day-ahead load forecast.
@@ -93,23 +92,51 @@ def _retrieve_entsoe_data(
     ``api_token_env`` is the name of the environment variable holding the token;
     read it here, never log it. Human implements.
     """
-    pass
+
+    start = pd.Timestamp(datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=backfill_days))
+    end = pd.Timestamp(datetime.datetime.now(datetime.timezone.utc))
+
+    client = EntsoePandasClient(api_key=api_key)
+    data = pd.DataFrame()
+    for area_code in list(area_codes):
+        df = client.query_load(
+            area_code,
+            start=start,
+            end=end,
+        )
+        df.columns = [area_code]
+        data = pd.concat([data, df], axis=1)
+
+    if include_tso_forecast:
+        for area_code in list(area_codes):
+            df_forecast = client.query_load_forecast(
+                area_code,
+                start=start,
+                end=end,
+            )
+            df_forecast.columns = [f"{area_code}_tso_forecast"]
+            data = pd.concat([data, df_forecast], axis=1)
+
+    return data
 
 
 def load_data(cfg: Config, backfill_days: int) -> pd.DataFrame:
-    if cfg.source.kind == "synthetic":
+    if cfg.source.kind_cfg.kind == "synthetic":
         return _create_synthetic_data(
-            synthetic_cfg=cfg.source.source_cfg,
+            synthetic_cfg=cfg.source.synthetic,
             backfill_days=backfill_days,
             timestamp_column_name=cfg.domain.timestamp_column,
             target_column_name=cfg.domain.target_column,
         )
-    elif cfg.source.kind == "entsoe":
+    elif cfg.source.kind_cfg.kind == "entsoe":
+        secrets_path = cfg.abs_path("secrets/secrets.yaml")
+        with open(secrets_path, "r", encoding="utf-8") as secrets:
+            entsoe_api_key = yaml.safe_load(secrets)["entsoe"]["api-key"]
         return _retrieve_entsoe_data(
             backfill_days,
-            api_token_env=cfg.source.source_cfg.api_token_env,
-            area_code=cfg.source.source_cfg.area_code,
-            include_tso_forecast=cfg.source.source_cfg.include_tso_forecast,
+            api_key=entsoe_api_key,
+            area_codes=cfg.source.entsoe.area_codes,
+            include_tso_forecast=cfg.source.entsoe.include_tso_forecast,
         )
     else:
         raise ValueError(f"Unknown source: {cfg.source.kind}")
@@ -125,13 +152,12 @@ def store_data(
     conn.execute(f"CREATE TABLE IF NOT EXISTS {table_name} AS SELECT * FROM incoming WHERE 1=0")
     # delete-then-insert overlapping keys = idempotent upsert
     conn.execute(
-        f"DELETE FROM {table_name} WHERE {timestamp_column_name} IN"
-        f"(SELECT {timestamp_column_name} FROM incoming)"
+        f"DELETE FROM {table_name} WHERE {timestamp_column_name} IN(SELECT {timestamp_column_name} FROM incoming)"
     )
     conn.execute(f"INSERT INTO {table_name} SELECT * FROM incoming")
 
 
-def ingest(cfg: Config, backfill_days: int) -> None:
+def ingest(cfg: Config, backfill_days: int) -> IngestResult:
     start_time_ingestion = datetime.datetime.now(datetime.timezone.utc)
     logger.info(f"Starting ingestion for {backfill_days} days backfill at {start_time_ingestion}.")
     try:
@@ -142,7 +168,7 @@ def ingest(cfg: Config, backfill_days: int) -> None:
     except Exception as e:
         logger.error(f"Error occurred during ingestion: {e}")
         return IngestResult(
-            source_cfg=cfg.source.source_cfg,
+            source_cfg=cfg.source.kind_cfg,
             backfill_days=backfill_days,
             error_occurred=True,
             message=f"Error occurred during ingestion: {e}",
@@ -152,11 +178,9 @@ def ingest(cfg: Config, backfill_days: int) -> None:
             data_end_time=None,
         )
 
-    logger.info(
-        f"Ingestion completed successfully at {datetime.datetime.now(datetime.timezone.utc)}."
-    )
+    logger.info(f"Ingestion completed successfully at {datetime.datetime.now(datetime.timezone.utc)}.")
     return IngestResult(
-        source_cfg=cfg.source.source_cfg,
+        source_cfg=cfg.source.kind_cfg,
         backfill_days=backfill_days,
         error_occurred=False,
         message="Ingestion completed successfully.",

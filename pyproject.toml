@@ -16,6 +16,7 @@ dependencies = [
     "pyyaml>=6.0",
     "holidays>=0.45",
     "evidently>=0.4",
+    "entsoe-py>=0.8.1",
 ]
 
 [project.optional-dependencies]

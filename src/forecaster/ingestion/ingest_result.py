@@ -2,11 +2,11 @@ import datetime
 
 from pydantic import BaseModel
 
-from forecaster.config import EntsoeCfg, SyntheticCfg
+from forecaster.config import AnySourceCfg
 
 
 class IngestResult(BaseModel):
-    source_cfg: SyntheticCfg | EntsoeCfg
+    source_cfg: AnySourceCfg
     backfill_days: int
     error_occurred: bool
     message: str

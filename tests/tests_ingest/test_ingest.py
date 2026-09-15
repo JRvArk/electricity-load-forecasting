@@ -24,9 +24,7 @@ def db_connection():
 
 @pytest.fixture
 def synthetic_cfg() -> SyntheticCfg:
-    return SyntheticCfg(
-        base_load=100, daily_amplitude=50, weekly_amplitude=20, noise_sd=10, seed=42
-    )
+    return SyntheticCfg(base_load=100, daily_amplitude=50, weekly_amplitude=20, noise_sd=10, seed=42)
 
 
 @pytest.fixture
@@ -58,6 +56,7 @@ def synthetic_data_fixture(
 
 ### FIX: every test function need not be parametrized
 
+
 # ========================= _create_synthetic_data() tests ===========================
 
 
@@ -83,9 +82,7 @@ def test_create_synthetic_data_non_null_values(
         timestamp_column_name=timestamp_column_name,
         target_column_name=target_column_name,
     )
-    assert (
-        synthetic_data.reset_index(drop=False).isna().sum().sum() == 0
-    )  # No null values in the DataFrame
+    assert synthetic_data.reset_index(drop=False).isna().sum().sum() == 0  # No null values in the DataFrame
 
 
 def test_create_synthetic_data_columns(
@@ -154,7 +151,9 @@ def test_store_data_row_count(
         table_name=table_name,
         timestamp_column_name=timestamp_column_name,
     )
-    row_count = db_connection.execute(f"SELECT COUNT(*) FROM {table_name}").fetchone()[0]
+    row_count = db_connection.execute(f"SELECT COUNT(*) FROM {table_name}").fetchone()
+    assert row_count is not None
+    row_count = row_count[0]
     assert row_count == days * 24
 
 
@@ -165,20 +164,25 @@ def test_store_data_idempotency(
     timestamp_column_name: str,
 ) -> None:
     data = synthetic_data_fixture
+    conn = db_connection
+    store_data(
+        conn=conn,
+        data_df=data,
+        table_name=table_name,
+        timestamp_column_name=timestamp_column_name,
+    )
+    count_after_first = conn.execute(f"SELECT COUNT(*) FROM {table_name}").fetchone()
+    assert count_after_first is not None
+    count_after_first = count_after_first[0]
     store_data(
         conn=db_connection,
         data_df=data,
         table_name=table_name,
         timestamp_column_name=timestamp_column_name,
     )
-    count_after_first = db_connection.execute(f"SELECT COUNT(*) FROM {table_name}").fetchone()[0]
-    store_data(
-        conn=db_connection,
-        data_df=data,
-        table_name=table_name,
-        timestamp_column_name=timestamp_column_name,
-    )
-    count_after_second = db_connection.execute(f"SELECT COUNT(*) FROM {table_name}").fetchone()[0]
+    count_after_second = conn.execute(f"SELECT COUNT(*) FROM {table_name}").fetchone()
+    assert count_after_second is not None
+    count_after_second = count_after_second[0]
     assert count_after_second == count_after_first  # Should not increase after second ingestion
 
 
@@ -239,7 +243,4 @@ def load_config_for_test(path: str | Path | None = None) -> Config:
     with open(cfg_path, "r", encoding="utf-8") as fh:
         raw = yaml.safe_load(fh)
     raw["storage"]["duckdb_path"] = ":memory:"  # Use in-memory DuckDB for tests
-    source = raw["source"]["kind"]
-    source_cfg = raw["source"][source]
-    raw["source"] = {"kind": source, "source_cfg": source_cfg}
     return Config(**raw)

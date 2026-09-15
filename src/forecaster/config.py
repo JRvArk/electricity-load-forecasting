@@ -59,7 +59,7 @@ _ENV_OVERRIDES: dict[str, tuple[str, ...]] = {
 }
 
 #: The checkout layout: <repo>/config/config.yaml, a sibling of src/.
-_DEFAULT_CONFIG_PATH = Path(__file__).resolve().parents[2] / "config" / "config.yaml"
+DEFAULT_CONFIG_PATH = Path(__file__).resolve().parents[2] / "config" / "config.yaml"
 #: An optional, gitignored overlay beside the config it modifies.
 _LOCAL_OVERLAY_NAME = "local.yaml"
 #: The copy built into the wheel, for installs that are not a checkout.
@@ -85,13 +85,13 @@ def default_config_path() -> Path:
     from_env = os.environ.get(ENV_CONFIG_PATH)
     if from_env:
         return Path(from_env).expanduser().resolve()
-    if _DEFAULT_CONFIG_PATH.is_file():
-        return _DEFAULT_CONFIG_PATH
+    if DEFAULT_CONFIG_PATH.is_file():
+        return DEFAULT_CONFIG_PATH
     packaged = _packaged_config_path()
     if packaged is not None:
         return packaged
     raise FileNotFoundError(
-        f"no config file: {_DEFAULT_CONFIG_PATH} does not exist, no {_PACKAGED_CONFIG_NAME} "
+        f"no config file: {DEFAULT_CONFIG_PATH} does not exist, no {_PACKAGED_CONFIG_NAME} "
         f"is packaged, and ${ENV_CONFIG_PATH} is unset"
     )
 
@@ -229,7 +229,7 @@ class Config(BaseModel):
     monitoring: MonitoringCfg
     mlflow: MlflowCfg
 
-    project_root: Path = Field(default_factory=lambda: _DEFAULT_CONFIG_PATH.parents[1])
+    project_root: Path = Field(default_factory=lambda: DEFAULT_CONFIG_PATH.parents[1])
     #: The file this object was loaded from. Provenance, so a run can report
     #: which config produced it rather than which config was expected.
     config_path: Path | None = None
