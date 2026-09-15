@@ -3,7 +3,9 @@
 Instructions for Claude Code. Read this fully before touching anything.
 The human-facing learning guide and phase roadmap live in `BUILD_PLAN.md`; defects found by
 review, filed by the phase that fixes them, live in `DEFECTS.md` — read the section for the phase
-you are working in before planning it.
+you are working in before planning it. Two smaller logs sit alongside them: `REVISIT.md`, for what
+is committed and not yet understood, and `LEARNINGS.md`, for mechanisms that had to be got right.
+All four are described in *Writing it down*, below.
 
 ## Status — read this before planning anything
 
@@ -123,11 +125,39 @@ unassisted:
    exercise. Asking what a traceback means defects from the one part of this project that is hard
    to acquire anywhere else.
 
-**A chat that settles something produces a commit.** Open decisions B and C land in the register
-in `BUILD_PLAN.md`, with the basis stated. If it exists only in a conversation, it is not decided.
-
 Whether this project is worth the time it is taking is not this repo's business — see
 *Repo boundary*.
+
+## Writing it down — immediately, and in the right file
+
+**A session that settles something writes it down in the same turn it is settled** — not at the end
+of the session, not when asked, and not "once it is implemented". Sessions here are short by
+design, so nothing carries between them except the repo: a conclusion that lives only in a
+conversation is gone when the window closes, and the next session pays to re-derive it or, worse,
+decides it differently. The four logs are how context moves between machines and between sessions.
+
+Route it by what kind of thing it is:
+
+- **`BUILD_PLAN.md`** — a *decision* and its basis. The register under *Open decisions* carries
+  both: open ones in bold, settled ones struck through with the date taken. Phase boxes carry
+  implementation guidance that is not itself a decision.
+- **`DEFECTS.md`** — something *wrong* in code, config or a document that already exists, filed
+  under the phase that fixes it, with the mechanism and the fix stated, and naming what it blocks.
+  Strike it through when fixed and name the commit; never delete it.
+- **`REVISIT.md`** — something *right* and *not yet understood*, with a pointer to the code and a
+  trigger in the build order rather than a date.
+- **`LEARNINGS.md`** — a *mechanism* worth carrying, generalised from the episode in this tree that
+  forced it.
+
+The bar for "settled" is low: if a question was answered and the answer changes what someone does,
+it belongs in one of the four. Then the commit that follows cites the entry — **if it exists only
+in a conversation, it is not decided.**
+
+An entry that would need this conversation in order to make sense is not finished. Each one is
+written for a reader who has the repo and nothing else, which is the same standard as
+*Repo boundary* above — and the reason these files work as the hand-off between one session and
+the next.
+
 
 ## Tech stack
 

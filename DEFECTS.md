@@ -238,6 +238,27 @@ and the config key is documented as a default. Either is defensible; having both
 
 ## Phase 4 — Packaging
 
+### D19 — The wheel packages whatever config the working tree held at build time
+**Blocks:** Phase 4, and any image built anywhere but CI.
+
+`[tool.hatch.build.targets.wheel.force-include]` copies `config/config.yaml` into the package as
+`forecaster/_default_config.yaml`, so that an install which is not a checkout can still find a
+config. The copy happens at **build** time and takes the working tree's version, uncommitted edits
+included. Observed: with `kind: entsoe` edited into the tree, a locally built wheel packaged
+`kind: entsoe` as its default, while the committed config said `synthetic`.
+
+CI builds from a clean checkout, so a released artifact is correct. A wheel built by hand is not,
+and nothing says so — the failure is an image that reaches for the network on first run, with the
+value that sent it there invisible inside the package rather than in the repo.
+
+The local overlay removes the *reason* to edit the tracked config, so this is now a trap rather
+than a live bug. It is filed because the trap survives the mitigation: anyone who edits
+`config/config.yaml` for an experiment and builds still ships that edit.
+
+**Fix:** refuse to build from a dirty tree, or assert at image-build time that the packaged config
+matches the committed one. Cheapest version is a step in the Phase 4 workflow that fails when
+`git status --porcelain config/` is non-empty.
+
 ### D13 — The Dockerfile pins a build tool to `latest`
 **Blocks:** nothing; it contradicts a stated convention.
 

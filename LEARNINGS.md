@@ -119,3 +119,48 @@ someone with a shell on the box".
 7. **"Never committed" is a claim to check, not to assume** — `git log --all -S'<fragment>'`. If it
    ever was committed, rewriting history does not recall the clones that already have it: rotate
    the credential instead.
+
+
+## L2 — Where setup runs decides whether it runs in time
+
+### What happened
+
+`config/local.yaml` is merged over the tracked config whenever a bare `load_config()` resolves the
+default path, which is right for a working copy and wrong for a test suite: every test would
+inherit whichever source that machine happened to be pointed at. The insulation is one line setting
+`$FORECASTER_CONFIG`, because a named config skips the overlay.
+
+The question was where to put that line — and the first instinct, an `autouse` session fixture, is
+too late.
+
+### The mechanism
+
+pytest imports `conftest.py` during **collection**, before it imports any test module. Fixtures, by
+contrast, run after collection, immediately around the tests that use them. So module-level code in
+a `conftest.py` is the only thing that is guaranteed to have run before a test module's `import`
+statements execute.
+
+That matters whenever importing the code under test has a side effect. It does here: `uvicorn
+forecaster.serving.app:app` requires a module-level `app` object, so building it will resolve
+configuration at import time. A test that does `from forecaster.serving.app import app` reads the
+config before a single fixture has run, and an autouse fixture setting the environment would have
+missed it — producing a failure whose cause is a file the test never mentions.
+
+Two smaller facts from the same corner:
+
+- **Tests in a `conftest.py` are not collected.** A `test_` function there is silently never run —
+  no error, no warning. Renaming a test module to `conftest.py` deletes its coverage.
+- **Fixtures resolve by name, nearest first, and a shadowed one is not an error.** Two files
+  disagreeing about what `cfg` means is legal and silent, which is the same failure shape.
+
+### The practice
+
+1. **Ask when setup runs, not just whether it runs.** Import-time side effects need import-time
+   setup; a fixture is not early enough, and the symptom is a failure that points at the wrong file.
+2. **Put process-wide environment setup at module scope in the topmost `conftest.py`**, so no
+   subdirectory can be added later that forgets it.
+3. **`autouse` is for side effects, not for values.** A fixture whose return nobody requests is
+   either doing nothing or doing something hidden.
+4. **Insulate the suite from developer-local state explicitly.** Anything gitignored — an overlay, a
+   credential, a database — is state CI does not have, so a test that reads it passes for different
+   reasons on different machines.

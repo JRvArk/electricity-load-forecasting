@@ -170,6 +170,15 @@ mess: request windows capped by the API so a long backfill is several calls, mis
 late revisions, where a previously-published hour comes back with a corrected value.
 The upsert must overwrite on the timestamp key, not just skip-if-exists.
 
+Decision E makes `[start, end)` the primitive. Three traps sit in resolving it, and each one is
+cheaper to decide than to debug. **Naive timestamps**: the store is tz-aware UTC, so `--start
+2026-09-01` has to be either rejected or documented as UTC — and ENTSO-E reasons in a zone's local
+day boundaries, so the two disagree by an hour twice a year, which is how a backfill lands short at
+a DST transition. **Half-open, consistently**: adjacent windows must not both cover an hour, or the
+upsert is repairing damage the interface caused. **The sugar's edges**: `--backfill-days N` resolves
+against `now()` floored to the hour, or the window depends on the minute the job fired and stops
+being reproducible — the same defect as D1, one level up.
+
 ### Phase 2 — Features + baseline + tracking
 
 > **[DECIDED 2026-09-07 — $H = 24$, lags measured from the forecast origin.]** Neither was defined
