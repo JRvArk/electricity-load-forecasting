@@ -97,12 +97,14 @@ discover mid-phase, and the open two gate a phase's done-criterion.
 | ~~**E**~~ | ~~Ingestion's run window~~ — **decided 2026-09-14: `[start, end)` is the primitive, `--backfill-days N` is sugar over it** | ~~Phase 1~~, and every scheduled invocation in Phase 5 | Settled. Phase 1 states the property as *populate an arbitrary `[start, end)` range*, and a days-before-now argument cannot express it — which is exactly the case the done-criterion is built around, re-ingesting a window whose values were revised after publication. The sugar resolves to `end` = now floored to the hour; the two forms are mutually exclusive; `IngestResult` records the resolved window alongside the realised extent, because the gap between requested and landed is the missing-hours signal Phase 7 reads |
 | ~~**F**~~ | ~~What the environment may override~~ — **decided 2026-09-14: per-environment values only; `source.kind` is not overridable** | ~~convention 3~~, and CI | Settled. `FORECASTER_DUCKDB_PATH` and `FORECASTER_MLFLOW_TRACKING_URI` are the same system on a different machine. `source.kind` is what the system *is*: an environment able to flip it could turn an offline test run into a live one from outside the repo, silently, which is the failure convention 3 exists to prevent. A run that wants a different source wants a different config — `$FORECASTER_CONFIG` already names one |
 
+| ~~**G**~~ | ~~Whether a short window is an error or a reported gap~~ — **decided 2026-09-15: three outcomes, not two. A failed call and a non-conformant frame are fatal; coverage is reported and never fatal** | ~~Phase 1's source contract~~, and Phase 7's missing-hours signal | Settled. Three independent questions were being collapsed into two: whether the *call* succeeded, whether the *rows* it returned conform (D17), and how much of the *window* landed. The first two fail the run. The third is a number in `IngestResult` (D22), judged across runs rather than within one. What separates them: a conformance violation is deterministic and ours — no retry helps, the next scheduled run repeats it exactly, and meanwhile malformed rows are in the store and everything downstream inherits them — while a coverage gap is contingent and the world's, and is often filled by the next run, which is the late-revision case the done-criterion is built around. **Retry fixes one class and never the other**, which is the line itself rather than a preference for strictness. The shape also needs **no threshold anywhere**: zero rows is simply coverage 0, so C's trap — a number chosen after looking at the data — cannot arise here. Which of the client's exceptions mean which is implementation, and is in the Phase 1 box |
+
 B and C remain open. **Do not start Phase 6 with either of them open**: both feed its
 done-criterion directly, and deciding them under time pressure at hour 80 of a 95-hour box is how a
 threshold ends up being whatever made the test pass.
 
-D, E and F are settled and have work outstanding rather than questions — see `DEFECTS.md` D17 and
-D18, which are due in the same pass as D.
+D, E, F and G are settled and have work outstanding rather than questions — see `DEFECTS.md` D17,
+D18, D20, D21 and D22, all due in the same pass.
 Under-delivering against a stated target is a result. An unbounded finish is not.
 
 ## Where this runs — a VPS, and Linux as a by-product
@@ -168,7 +170,9 @@ which is the one that actually bites on real data.
 When I later flip `kind: entsoe`, the same upsert must hold up against real-world
 mess: request windows capped by the API so a long backfill is several calls, missing hours, and
 late revisions, where a previously-published hour comes back with a corrected value.
-The upsert must overwrite on the timestamp key, not just skip-if-exists.
+The upsert must overwrite rather than skip-if-exists, and it keys on **(timestamp, entity)** — one
+row per series under decision D's long schema, so a frame carrying one zone must not disturb
+another's rows at the same hours. See `DEFECTS.md` D20, which is that key stated as a defect.
 
 Decision E makes `[start, end)` the primitive. Three traps sit in resolving it, and each one is
 cheaper to decide than to debug. **Naive timestamps**: the store is tz-aware UTC, so `--start
@@ -178,6 +182,34 @@ a DST transition. **Half-open, consistently**: adjacent windows must not both co
 upsert is repairing damage the interface caused. **The sugar's edges**: `--backfill-days N` resolves
 against `now()` floored to the hour, or the window depends on the minute the job fired and stops
 being reproducible — the same defect as D1, one level up.
+
+**Decision G's three outcomes, and how a client's exceptions map onto them.** The adapter's job is
+to translate one vocabulary into the other, and that mapping is where the decision becomes code.
+Verified against the installed `entsoe-py`:
+
+| The client raises | Means | The adapter |
+|---|---|---|
+| `NoMatchingDataError` | nothing published for that window | returns an **empty frame** — coverage 0, not a failure |
+| `requests.HTTPError` | bad token, 5xx, network | **fails** the run |
+| `InvalidBusinessParameterError`, `InvalidPSRTypeError` | the request names something that is not a thing | **fails** — a config error |
+| `PaginationError` | the window exceeds the API's cap | **splits the window and retries** |
+
+The first row is what makes G decidable rather than a matter of taste. `entsoe.py` raises
+`NoMatchingDataError` for genuine emptiness — on the HTTP-error path *and* on a 200 response whose
+body contains "No matching data found" — while a bad token falls through as a plain
+`requests.HTTPError`. They are different types, so **an empty result can never mean a broken
+credential**, and the empty path can be treated as benign without hiding anything. entsoe-py's own
+aggregate query does the same, continuing past `NoMatchingDataError` for one area and returning the
+rest.
+
+`PaginationError` is not a failure because decision E made an arbitrary `[start, end)` the
+primitive, and a primitive that fails on large windows is not one. Splitting belongs to the adapter
+— the same "one backfill is several calls" this phase already anticipates.
+
+**Per entity:** one zone's `NoMatchingDataError` contributes nothing while the others land; one
+zone's `HTTPError` fails the run, but whatever did arrive is still stored and the exit code is still
+non-zero. Storing a subset is only safe because **D20** fixes the upsert's key arity — before that
+fix, storing one zone deleted the other.
 
 ### Phase 2 — Features + baseline + tracking
 

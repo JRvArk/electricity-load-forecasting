@@ -136,6 +136,14 @@ design, so nothing carries between them except the repo: a conclusion that lives
 conversation is gone when the window closes, and the next session pays to re-derive it or, worse,
 decides it differently. The four logs are how context moves between machines and between sessions.
 
+**Write the entry; do not ask whether to write it.** "Settled" means the question has an answer,
+not that the answer has been agreed — an assistant that pauses for approval spends a turn on a
+summary of the entry rather than on the entry, and the summary is the lossy version of exactly the
+thing that was about to be written down. Review happens in the file, where the claim is concrete
+enough to disagree with and carries an ID something can cite; a wrong entry gets corrected or
+struck through there, which is what the format is for. This applies to all four logs, and to
+entries about the human's own code — a defect found is filed, not offered.
+
 Route it by what kind of thing it is:
 
 - **`BUILD_PLAN.md`** — a *decision* and its basis. The register under *Open decisions* carries

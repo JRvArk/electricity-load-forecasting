@@ -155,10 +155,20 @@ which names neither the missing column nor the function that owed it. Source-ind
 the property Phase 1 exists to establish; it currently holds only because one source has been run.
 
 **Fix:** one signature for every source — the configured column names reach each one, whether as
-arguments or as the whole `Config` — and one shared conformance assertion (columns are exactly the
-configured timestamp and target, tz-aware, hourly, strictly increasing, no duplicates) applied to
-each source in turn. The assertion is the part that keeps a third source from drifting the same
-way; for a live source it runs against a recorded frame, so CI stays offline.
+arguments or as the whole `Config` — and one shared conformance assertion applied to each source in
+turn: columns are exactly the configured timestamp, **entity** and target; timestamps are tz-aware
+and hourly; and they are strictly increasing with no duplicates **within each entity**. The
+assertion is the part that keeps a third source from drifting the same way; for a live source it
+runs against a recorded frame, so CI stays offline. **A violation is fatal** (decision G): it means
+the adapter is wrong rather than the world, so no retry helps and the next scheduled run repeats it
+exactly. How much of the requested window landed is a separate question and is never fatal — that
+is D22's job.
+
+*Amended after decision D.* The clause originally read "the configured timestamp and target", and
+monotonicity was stated globally — both written before the schema became long. A long frame stacking
+two zones is not globally monotonic, so a bare `is_monotonic_increasing` check rejects a correct
+frame; the property is per entity, and the entity column is part of the contract rather than an
+extra.
 
 ### D18 — A frame without the timestamp column truncates the raw table instead of failing
 **Blocks:** hard convention 1, and any history Phase 7 accumulates.
@@ -181,6 +191,85 @@ worse than a crash: the job reports the INSERT's error while the DELETE has alre
 **Fix:** qualify the subquery's column (`incoming.<ts>`), so a frame missing it is a binder error
 rather than a truncation, and pin it with a test that calls `store_data` with a frame that lacks
 the timestamp column.
+
+### D20 — The upsert keys on the timestamp alone, against a table keyed on (timestamp, entity)
+**Blocks:** hard convention 1 on any run carrying a subset of entities, and decision D's long schema.
+
+Decision D makes the raw table long — one row per (timestamp, series), with `domain.entity_column`
+naming the key. `store_data` is passed `timestamp_column_name` and nothing else, and deletes on
+`WHERE <ts> IN (SELECT <ts> FROM incoming)`. So the key it upserts on is the timestamp, while the
+key the table is actually keyed on is the pair.
+
+It is *accidentally* correct while every frame carries every entity: the delete removes all
+entities at the overlapping timestamps and the insert puts all of them back. It stops being correct
+the first time a frame carries a subset — one zone re-fetched after a failed call, one zone
+backfilled further than the others, a source that publishes one entity late. Then the delete removes
+every entity's rows at those timestamps and the insert restores only the entity in the frame. The
+others are gone, and nothing raises. It would show as a *falling* row count, which is exactly what
+the Phase 1 done-criterion watches — so the criterion catches this, but only if a fixture can
+express it.
+
+The defect is invisible today because `_create_synthetic_data` produces a single unnamed series with
+no entity column at all, so no existing test can express the case. That is the same reason decision D
+requires fixtures to carry at least two entities.
+
+**Fix:** pass the entity column alongside the timestamp column and delete on the pair. `IN` over two
+columns needs a row constructor or an `EXISTS`/`USING` form rather than a scalar subquery — qualify
+its columns while rewriting it (D18), and wrap it with the insert in one transaction (D6). Pin it
+with a test that stores two entities, re-stores one of them alone, and asserts the other's rows
+survive with their values unchanged.
+
+### D21 — The test suite does not collect, behind a CI check that was already red
+**Blocks:** every test in the repo, and the Phase 1 pass's own red-to-green.
+
+The config layer landed ahead of the code that reads it, and two of its renames are unmet in the
+tests:
+
+- `tests/tests_ingest/test_ingest.py` imports `_DEFAULT_CONFIG_PATH`; `config.py` exports
+  `DEFAULT_CONFIG_PATH`. An `ImportError` during collection, so none of that module's tests run.
+- `SyntheticCfg` gained `entity_ids: list[str] = Field(min_length=1)` under decision D. Both
+  `tests/tests_ingest/test_ingest.py` and `tests/tests_build/test_build.py` construct it by hand
+  without one, so those fixtures raise `ValidationError: 1 validation error for SyntheticCfg /
+  entity_ids / Field required`.
+
+The part worth keeping is *why it was not noticed*. CI was already failing on **D9**'s `ruff` step,
+and a check that is already red cannot report a new breakage — a red build carries one bit, and D9
+had already spent it. Locally the suite was not run either: the `dev` extra is not installed in
+every working copy, so `pytest` is simply absent on at least one of them. Both halves of the signal
+were off at once, which is how a suite stops collecting and nothing says so.
+
+**Fix:** the ingest tests are rewritten in this pass regardless (D17, D20, decision E), so take the
+source block from the loaded config rather than constructing `SyntheticCfg` in a fixture — decision
+D's two entities already live there, and a fixture that builds its own config is a second place for
+the schema to drift. `tests/tests_build/test_build.py` inherits the same change although its phase
+has not started. The general form is the reason D9 is worth clearing early: keep the red build at
+one cause, or it stops being evidence.
+
+### D22 — `IngestResult` cannot express the gap decision E made it responsible for
+**Blocks:** Phase 7's missing-hours signal, and Phase 5's run-history table.
+
+Decision E states that `IngestResult` "records the resolved window alongside the realised extent,
+because the gap between requested and landed is the missing-hours signal Phase 7 reads". The model
+as written carries `backfill_days`, `data_start_time` and `data_end_time`, and none of the three
+does that job:
+
+- **`backfill_days` is the sugar, not the primitive.** It cannot express a window that did not end
+  at `now()` — which is every re-ingest of a historical range, the case the done-criterion is built
+  around. A result that records the sugar cannot say what was actually asked for.
+- **`data_start_time` / `data_end_time` are a min and a max**, so a window with a hole in the middle
+  is indistinguishable from a complete one. 90 days requested, 88 landed with a two-day gap in
+  February, reports the same two timestamps as a clean run. Under decision D's long schema it is
+  worse: taken across entities, one complete series hides another that landed nothing.
+- **There is no row count**, so the one cheap number that would separate those cases is absent too.
+
+An ingest that silently lands short therefore reports success with plausible-looking fields. That is
+the same shape as **D3** — a failure that is legible to the code and invisible to everything
+downstream — one level up, in the result object rather than the exit code. It reaches Phase 5 as
+well: the run-history table's `status` is meant to be derivable from what a step returns.
+
+**Fix:** carry the resolved window as the half-open pair it is, and a realised extent that a hole
+can move — rows written is enough, since expected hours × entities against actual separates a short
+window from a complete one without storing the missing hours themselves.
 
 ---
 
