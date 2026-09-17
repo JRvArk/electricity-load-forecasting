@@ -186,3 +186,81 @@ Two smaller facts from the same corner:
 4. **Insulate the suite from developer-local state explicitly.** Anything gitignored — an overlay, a
    credential, a database — is state CI does not have, so a test that reads it passes for different
    reasons on different machines.
+
+
+### L3 — A memo is only correct if its key names everything the answer depends on
+**Pays off in:** Phase 3. A `uvicorn` process is long-lived, so what the cache does with an edited
+config stops being a detail and becomes an operational property.
+
+#### What happened
+
+`load_config` was memoised with `@lru_cache(maxsize=1)` on the path argument. Its result depends on
+much more than the path — the bytes in the file, an optional overlay beside it, and a handful of
+environment variables — so a config edited between two calls returned the object built from the
+previous contents. That was `DEFECTS.md` D7, and it is invisible: every call still returns a valid
+`Config`, just the wrong one.
+
+#### The mechanism
+
+`lru_cache` keys on the arguments and on nothing else. It cannot see a file, a clock, or an
+environment. So the fix is not a cleverer cache; it is to make the function's arguments name every
+input, and let a wrapper compute them:
+
+```python
+def load_config(path=None):                      # not cached
+    ...
+    return _load_config_cached(                  # cached
+        cfg_path, overlay, cfg_path.stat().st_mtime_ns,
+        overlay.stat().st_mtime_ns if overlay else 0, _env_snapshot(),
+    )
+```
+
+Three of those five are never read in the body. They exist to be part of the key.
+
+Observed, with `cache_info()` after each call:
+
+```
+two calls, same args      -> hits=1, misses=1, currsize=1   same object: True
+a different path          -> hits=1, misses=2, currsize=2
+same path, env changed    -> hits=1, misses=3, currsize=3
+env changed again         -> hits=1, misses=4, currsize=4
+env removed -> back to a  -> hits=2, misses=4, currsize=4   same object as first: True
+file edited               -> hits=2, misses=5, currsize=5
+```
+
+Four properties worth taking from that:
+
+- **Invalidation is non-match, not eviction.** A changed file does not clear anything; it produces a
+  different key that misses. The old entry stays.
+- **So entries can be re-matched.** Line five removed an environment variable, which returned the key
+  to its earlier value — the call hit and returned the *identical object* from line one. A memo
+  whose key goes back is a memo that comes back.
+- **`maxsize` bounds the accumulation**, and eviction costs a re-parse and nothing else.
+- **`st_mtime_ns` rather than a content hash** is deliberate: `stat()` is cheap enough to do on every
+  call, and reading the file to hash it would defeat the point. Nanosecond resolution avoids the
+  one-second-granularity collision. The honest gap is a tool that rewrites content while preserving
+  mtime — some restores, `rsync` without `--checksum` — which this cache cannot see.
+
+#### The consequence nobody asks about until it bites
+
+Because mtime is in the key, a **long-running** process picks up an edited config on its next call,
+with no restart. For a scheduled job that exits between runs this is irrelevant. For the Phase 3
+serving process it is a behaviour change mid-flight: a model is loaded against one config and the
+next request may resolve a different one. That is a property to decide about, not a bug — a serving
+process may well want configuration to be fixed at startup and to require a restart, which means
+reading the config once at import rather than calling `load_config()` per request.
+
+#### The practice
+
+1. **Write down what the answer depends on, then check the key contains all of it.** Path, file
+   contents, environment, and anything else outside the arguments. A memo keyed on a subset is not a
+   cache; it is a stale-value generator with good performance numbers.
+2. **Prefer a cheap proxy for "has it changed" over the real thing**, as long as the proxy is
+   honest about what it misses — `stat()` over hashing — and state the gap where the code is.
+3. **Keep the cached function private and the wrapper public.** The wrapper is where inputs get
+   collected; a caller reaching the cached function directly can pass a mismatched key and get a
+   wrong answer with no error.
+4. **Decide explicitly whether a long-lived process should see configuration change under it.**
+   Picking it up automatically and requiring a restart are both defensible; not having chosen is not.
+5. **Shared cached objects should be immutable.** One caller mutating a memoised value corrupts it
+   for every later caller in the process — which is why `Config` is frozen.

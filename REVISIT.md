@@ -30,11 +30,15 @@ next reader too.
 
 ---
 
-## R1 — Unread function parameters that are load-bearing, via `lru_cache`
+## ~~R1 — Unread function parameters that are load-bearing, via `lru_cache`~~
 
 **Where:** `src/forecaster/config.py:269-302` — `_load_config_cached`, `_env_snapshot`, `load_config`.
 **Revisit when:** before Phase 5, since the failure this prevents is a scheduled job reading a
 config that is stale against its own file, and Phase 5 is where jobs stop being run by hand.
+
+**Explained, and moved to `LEARNINGS.md` L3.** The entry below stands as written; the check at the
+end of it is still worth doing cold, before reading L3, because a mechanism you can predict is the
+only evidence that it has actually landed.
 
 `_load_config_cached` takes `_mtime_ns` and `_env` and never reads either. They are not dead: they
 are part of `lru_cache`'s key. `lru_cache` memoises on the *arguments*, so a value that is never

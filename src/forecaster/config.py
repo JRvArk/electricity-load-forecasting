@@ -97,6 +97,8 @@ def default_config_path() -> Path:
 
 
 class DomainCfg(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
     name: str
     target_column: str
     timestamp_column: str
@@ -107,7 +109,7 @@ class DomainCfg(BaseModel):
 
 
 class SyntheticCfg(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", frozen=True)
 
     kind: Literal["synthetic"] = "synthetic"
     #: One generated series per id. Keep at least two in any config the tests
@@ -121,7 +123,7 @@ class SyntheticCfg(BaseModel):
 
 
 class EntsoeCfg(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", frozen=True)
 
     kind: Literal["entsoe"] = "entsoe"
     #: Bidding zone codes. A list, never a bare string — `list("10YNL...")`
@@ -148,7 +150,7 @@ class SourceCfg(BaseModel):
     it to a concrete type.
     """
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", frozen=True)
 
     kind: Literal["synthetic", "entsoe"]
     synthetic: SyntheticCfg
@@ -179,6 +181,8 @@ class SourceCfg(BaseModel):
 
 
 class StorageCfg(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
     duckdb_path: str
     raw_table: str
     #: The TSO's published forecast lands in its own table rather than as a
@@ -189,6 +193,8 @@ class StorageCfg(BaseModel):
 
 
 class FeaturesCfg(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
     lags: list[int]
     rolling_windows: list[int]
     calendar: bool
@@ -196,6 +202,8 @@ class FeaturesCfg(BaseModel):
 
 
 class TrainingCfg(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
     horizon_hours: int
     model: str
     test_horizon_hours: int
@@ -204,22 +212,41 @@ class TrainingCfg(BaseModel):
 
 
 class RegistryCfg(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
     model_name: str
     production_stage: str
 
 
 class MonitoringCfg(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
     reference_window_hours: int
     current_window_hours: int
     drift_threshold: float
 
 
 class MlflowCfg(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
     tracking_uri: str
     experiment: str
 
 
 class Config(BaseModel):
+    """The whole configuration, immutable once loaded.
+
+    Every model here is frozen, not just this one: freezing the outer object
+    would still leave `cfg.domain.target_column = ...` legal, and a config that
+    can be edited at runtime makes hard convention 2 untrue — whatever a run
+    record or an MLflow param captured would describe the object at the moment
+    it was recorded, not necessarily what the code ran against. `load_config` is
+    memoised besides, so a mutation would reach every later caller in the
+    process.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
     domain: DomainCfg
     source: SourceCfg
     storage: StorageCfg
