@@ -157,7 +157,15 @@ the property Phase 1 exists to establish; it currently holds only because one so
 **Fix:** one signature for every source — the configured column names reach each one, whether as
 arguments or as the whole `Config` — and one shared conformance assertion applied to each source in
 turn: columns are exactly the configured timestamp, **entity** and target; timestamps are tz-aware
-and hourly; and they are strictly increasing with no duplicates **within each entity**. The
+and hourly; and they are strictly increasing with no duplicates **within each entity**.
+
+It is **production code, called by the dispatcher**, not a test helper — a frame goes source →
+assertion → `store_data`, on every run. Two reasons it belongs there rather than in the suite. A
+test can only fail on the frames the fixtures carry, and a recorded fixture pins what the source
+looked like the day it was recorded; the failure this catches is the day it stops looking like that,
+which happens on the box. And a check the *dispatcher* owns cannot be skipped by a source added
+later, whereas one each source calls for itself has to be remembered — which is the same shape as
+the original defect, where nothing in the source's signature was aware a raw schema existed. The
 assertion is the part that keeps a third source from drifting the same way; for a live source it
 runs against a recorded frame, so CI stays offline. **A violation is fatal** (decision G): it means
 the adapter is wrong rather than the world, so no retry helps and the next scheduled run repeats it
@@ -267,9 +275,19 @@ the same shape as **D3** — a failure that is legible to the code and invisible
 downstream — one level up, in the result object rather than the exit code. It reaches Phase 5 as
 well: the run-history table's `status` is meant to be derivable from what a step returns.
 
+The same object flattens the **failure** side too, and decision G is what turns that from a
+simplification into a defect. `ingest()` catches a bare `Exception` and sets one boolean, so a dead
+network and a non-conformant frame produce the same result with a different string in `message` —
+while G separated them on purpose: a failed call is contingent and a retry may fix it, a contract
+violation is deterministic and a retry never will. Everything reading the result sees one
+undifferentiated error and has to parse prose to recover the distinction. Phase 6's drills begin
+from a log line, and this is the log line they would begin from.
+
 **Fix:** carry the resolved window as the half-open pair it is, and a realised extent that a hole
 can move — rows written is enough, since expected hours × entities against actual separates a short
-window from a complete one without storing the missing hours themselves.
+window from a complete one without storing the missing hours themselves. And give the conformance
+assertion its own exception type, caught separately, so the result records *which* fatal outcome
+occurred rather than only that one did.
 
 ---
 

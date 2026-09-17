@@ -211,6 +211,30 @@ zone's `HTTPError` fails the run, but whatever did arrive is still stored and th
 non-zero. Storing a subset is only safe because **D20** fixes the upsert's key arity — before that
 fix, storing one zone deleted the other.
 
+**Testing the live source while CI stays offline.** Convention 3 requires that no test makes a
+network call. It does *not* mean only the synthetic source is tested — that reading would exercise
+the one source that was never broken, since D17's defect was on the ENTSO-E path. Note first that
+the conformance assertion is a **runtime guard**, running inside every ingest on whatever frame the
+adapter just produced; the tests below are a separate question from where it runs.
+
+Three surfaces, each offline by its own route:
+
+- **The assertion itself** — hand-built malformed frames, one per clause: a duplicate timestamp,
+  naive timestamps, a missing entity column, quarter-hourly spacing. No source is involved. This is
+  the one most likely to be skipped and the most valuable, because every source depends on it, so a
+  bug *in it* is a bug in all of them.
+- **The exception mapping above** — a fake client whose query method raises each exception in turn.
+  No recorded data at all; the subject is branches, not frames.
+- **The adapter's translation** — one recorded frame, stubbed over the client's query method. This
+  is the surface that catches the `10YNL----------L`-column defect.
+
+What "recorded" means: the **DataFrame the client returns**, saved as parquet, is enough and is
+cheap. Stubbing at the HTTP layer instead would also cover the library's own parser changing shape
+on an upgrade — worth having, not worth the machinery first. Capture the raw response too while the
+token is to hand, though: recording needs network and a live credential and happens once, whereas
+parsing a saved response later is free. **Save responses, never requests** — the token travels in
+the query string (`LEARNINGS.md` L1).
+
 ### Phase 2 — Features + baseline + tracking
 
 > **[DECIDED 2026-09-07 — $H = 24$, lags measured from the forecast origin.]** Neither was defined

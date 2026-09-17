@@ -96,6 +96,11 @@ Worth stating, because "it's in an env var" gets treated as a conclusion:
   message leaks it into logs.
 - Exporting it by hand puts it in shell history — which is why it lives in a file that is sourced,
   not in a command that is typed.
+- **A recorded HTTP interaction captures it.** `entsoe-py` passes the key as a query parameter —
+  `securityToken` in `_base_request`'s params — so a saved request URL, a VCR-style cassette, or a
+  debug log of the call *is* the credential, committed. Record responses, never requests; scrub the
+  URL if the recording format carries one. This matters here because keeping CI offline means
+  recording a live response once (`DEFECTS.md` D17), which is precisely the moment the trap is set.
 - Loading it from a shell profile puts it in the environment of *every* process started on that
   machine. Loading it per-session keeps the blast radius to that shell and its children.
 
