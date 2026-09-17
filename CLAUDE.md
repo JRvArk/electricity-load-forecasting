@@ -131,7 +131,10 @@ Whether this project is worth the time it is taking is not this repo's business 
 ## Writing it down — immediately, and in the right file
 
 **A session that settles something writes it down in the same turn it is settled** — not at the end
-of the session, not when asked, and not "once it is implemented". Sessions here are short by
+of the session, not when asked, not "once it is implemented", and **without asking permission
+first**: write the entry and report it, since removing a paragraph is cheaper than a round trip to
+authorise one. Judgement still applies to *whether* an entry is warranted; it does not apply to
+whether to ask. Sessions here are short by
 design, so nothing carries between them except the repo: a conclusion that lives only in a
 conversation is gone when the window closes, and the next session pays to re-derive it or, worse,
 decides it differently. The four logs are how context moves between machines and between sessions.

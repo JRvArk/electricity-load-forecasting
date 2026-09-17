@@ -239,6 +239,16 @@ tests:
   `tests/tests_ingest/test_ingest.py` and `tests/tests_build/test_build.py` construct it by hand
   without one, so those fixtures raise `ValidationError: 1 validation error for SyntheticCfg /
   entity_ids / Field required`.
+- The same module carries `load_config_for_test`, which reads the yaml itself and patches
+  `storage.duckdb_path` to `:memory:`. It is the stale import's actual home, and it is a second
+  loader: it skips the overlay, the environment overrides, `project_root` derivation and the
+  `config_path` / `config_overlay` provenance, so what it returns is a `Config` the real loader
+  cannot produce — a test passing against it is not evidence about the loader the code uses.
+  `FORECASTER_DUCKDB_PATH` is in the override allowlist for exactly this substitution, so the seam
+  already existed. Setting it at module scope in `tests/conftest.py`, beside `FORECASTER_CONFIG`,
+  also makes reaching the real database impossible rather than merely discouraged. Note that each
+  `duckdb.connect(":memory:")` is a separate database, so a test opening two connections wants a
+  `tmp_path` file instead.
 
 The part worth keeping is *why it was not noticed*. CI was already failing on **D9**'s `ruff` step,
 and a check that is already red cannot report a new breakage — a red build carries one bit, and D9

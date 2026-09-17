@@ -264,3 +264,57 @@ reading the config once at import rather than calling `load_config()` per reques
    Picking it up automatically and requiring a restart are both defensible; not having chosen is not.
 5. **Shared cached objects should be immutable.** One caller mutating a memoised value corrupts it
    for every later caller in the process — which is why `Config` is frozen.
+
+
+### L4 — A check that is already failing cannot report a new failure
+**Pays off in:** Phase 4, where CI becomes the thing the repo asks a reader to trust, and Phase 6,
+where a threshold has to be chosen that can still move.
+
+#### What happened
+
+The test suite stopped collecting — a stale import after a rename, plus fixtures constructing a
+model that had gained a required field — and nothing said so. Both detectors were dark at once, for
+unrelated reasons:
+
+- **CI was already red** on `ruff`, filed as D9 and left open. The run had been failing for several
+  commits, so the build going from failing-for-one-reason to failing-for-three changed nothing
+  anybody could see.
+- **Locally the suite was not run**, because the `dev` extra is not installed in every working copy,
+  so `pytest` is simply absent on at least one machine.
+
+#### The mechanism
+
+A pass/fail check carries **one bit**. Its information is in the *transition*, not the level: red
+tells you something is wrong only if it was green the moment before. Once a check is red for a known
+reason, every further breakage arrives into a state that already looks the same, and the check has
+stopped being an instrument — it is now a label.
+
+This is why "we know about that failure, ignore it" is a more expensive decision than it sounds. The
+cost is not the one known defect; it is every *unknown* defect the check can no longer report, for
+as long as it stays red. A known-failing check has to be fixed, or removed, or split so the rest of
+it still carries signal — leaving it red and remembered is the one option that silently disables it.
+
+The same shape appears wherever a signal saturates: a log line that always appears, an alert that
+fires every day, a threshold set where it trips constantly. In each case the reader adapts, and the
+adaptation is indistinguishable from the signal being switched off.
+
+#### Where it bites next, in this repo
+
+`monitoring.drift_threshold` is a placeholder of `0.5`, and open decision **C** asks for a value
+with a stated basis. That is this mechanism in its predictive form: most features here are
+transforms of one series, so they drift together, and a threshold that most windows exceed produces
+a retrain trigger that fires constantly — which is a saturated signal, not a sensitive one. The
+threshold has to be chosen so that tripping remains *informative*, which is a stronger requirement
+than it being defensible.
+
+#### The practice
+
+1. **Treat a red check as an outage of the check**, not as a known-failing test. Fix, delete, or
+   quarantine it so the remainder still transitions.
+2. **Count your independent detectors, and assume they fail independently.** Two were meant to cover
+   this — CI and a local run — and neither was working, for reasons that had nothing to do with each
+   other. Two detectors are only two if you know both are live.
+3. **Prefer a check that can go green.** A check that has never passed in this working copy carries
+   no information about anything, and the absence of a baseline hides that.
+4. **When choosing a threshold, ask what fraction of normal operation trips it** before asking
+   whether the value is defensible. A signal that is usually on is off.
