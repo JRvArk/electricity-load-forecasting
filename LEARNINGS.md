@@ -14,15 +14,30 @@ be earned by that episode. This is not a syllabus and not a reading list — the
 curriculum, and a separate learning track has been refused. An entry that could have been written
 without this repo existing does not belong here.
 
-**Convention.** Entries are `L<n>`, stable. Each states **what happened**, **the mechanism**, and
-**the practice** that generalises. Entries are not struck through: unlike a defect or an open
+**Convention.** Entries are `L<n>`, stable, and each states **what happened**, **the mechanism**,
+and **the practice** that generalises. Entries are not struck through: unlike a defect or an open
 question, a learning has no terminal state.
+
+**Filed by the phase whose work produced it** — not by the phase it is most useful in. The point of
+the grouping is that finishing a phase and reading its section answers "what did building this
+teach me", which is a question about where you were, not where the knowledge later applies. Where an
+entry pays off somewhere else, it says so in a **Pays off in** line, so the cross-phase value is not
+lost to the filing. Sections appear as entries arrive; a phase with nothing under it has no heading
+rather than an empty one. Numbering runs across the whole file, so an entry keeps its id wherever it
+sits.
 
 ---
 
-## L1 — File modes, and where a credential lives
+## Phase 1 — Ingestion + storage
 
-### What happened
+The live source arrives here, which is what makes a credential and a test suite that must stay
+offline both Phase 1 problems rather than later ones.
+
+### L1 — File modes, and where a credential lives
+**Pays off in:** Phase 4 and Phase 5. A container and a systemd unit both hand a
+process environment variables and neither hands it a file at a fixed path.
+
+#### What happened
 
 The ENTSO-E API key was kept at `secrets/secrets.yaml` inside the repo, read by path in
 `ingest.py`, and protected by a `.gitignore` rule added after the file already existed. It was
@@ -33,7 +48,7 @@ It was migrated to `~/.config/forecaster/env`, mode `600` in a directory of mode
 repo copy deleted. `config/config.yaml` names the variable — `source.entsoe.api_key_env:
 ENTSOE_TOKEN` — and the code reads the value from the environment at the point of use.
 
-### The mechanism: what 600 and 700 mean
+#### The mechanism: what 600 and 700 mean
 
 A Unix file has three sets of permissions — **owner**, **group**, **everyone else** — and each set
 is three bits: read (4), write (2), execute (1), summed into one octal digit. The leading `0` is
@@ -67,7 +82,7 @@ Two related mechanisms that matter in practice:
   already been exposed. `O_EXCL` additionally makes the call fail rather than clobber an existing
   file.
 
-### The mechanism: how the key reaches the code
+#### The mechanism: how the key reaches the code
 
 Four steps, each of which can be checked independently:
 
@@ -86,7 +101,7 @@ is destined for a persisted run history; MLflow logs params; logs print config. 
 config *field*, all three would contain it. Because config holds only the name, a full
 `model_dump_json()` contains `'api_key_env': 'ENTSOE_TOKEN'` and nothing else.
 
-### What an environment variable does not protect against
+#### What an environment variable does not protect against
 
 Worth stating, because "it's in an env var" gets treated as a conclusion:
 
@@ -107,7 +122,7 @@ Worth stating, because "it's in an env var" gets treated as a conclusion:
 The property achieved is "not in the repo, not in any dump, not in any artifact" — not "safe from
 someone with a shell on the box".
 
-### The practice
+#### The practice
 
 1. **Config names secrets; it never contains them.** The indirection is what makes leaking one
    structurally impossible rather than a thing to remember.
@@ -126,9 +141,11 @@ someone with a shell on the box".
    the credential instead.
 
 
-## L2 — Where setup runs decides whether it runs in time
+### L2 — Where setup runs decides whether it runs in time
+**Pays off in:** Phase 3. `uvicorn forecaster.serving.app:app` needs a module-level `app`, so
+that module resolves config at import — the case an autouse fixture cannot reach.
 
-### What happened
+#### What happened
 
 `config/local.yaml` is merged over the tracked config whenever a bare `load_config()` resolves the
 default path, which is right for a working copy and wrong for a test suite: every test would
@@ -138,7 +155,7 @@ inherit whichever source that machine happened to be pointed at. The insulation 
 The question was where to put that line — and the first instinct, an `autouse` session fixture, is
 too late.
 
-### The mechanism
+#### The mechanism
 
 pytest imports `conftest.py` during **collection**, before it imports any test module. Fixtures, by
 contrast, run after collection, immediately around the tests that use them. So module-level code in
@@ -158,7 +175,7 @@ Two smaller facts from the same corner:
 - **Fixtures resolve by name, nearest first, and a shadowed one is not an error.** Two files
   disagreeing about what `cfg` means is legal and silent, which is the same failure shape.
 
-### The practice
+#### The practice
 
 1. **Ask when setup runs, not just whether it runs.** Import-time side effects need import-time
    setup; a fixture is not early enough, and the symptom is a failure that points at the wrong file.

@@ -154,8 +154,10 @@ Route it by what kind of thing it is:
   Strike it through when fixed and name the commit; never delete it.
 - **`REVISIT.md`** — something *right* and *not yet understood*, with a pointer to the code and a
   trigger in the build order rather than a date.
-- **`LEARNINGS.md`** — a *mechanism* worth carrying, generalised from the episode in this tree that
-  forced it.
+- **`LEARNINGS.md`** — a *mechanism* worth carrying, generalised from the episode in this tree
+  that forced it. Filed under the phase whose work produced it, so that finishing a phase and
+  reading its section answers what building it taught; a **Pays off in** line carries the value
+  across to any other phase that needs it.
 
 The bar for "settled" is low: if a question was answered and the answer changes what someone does,
 it belongs in one of the four. Then the commit that follows cites the entry — **if it exists only
