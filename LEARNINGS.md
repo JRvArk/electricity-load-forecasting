@@ -318,3 +318,61 @@ than it being defensible.
    no information about anything, and the absence of a baseline hides that.
 4. **When choosing a threshold, ask what fraction of normal operation trips it** before asking
    whether the value is defensible. A signal that is usually on is off.
+
+
+### L5 — Dependent parameters belong to one function, not to every caller
+**Pays off in:** Phase 5, where a unit file passes a window on the command line, and Phase 7, which
+reads the window back out of run history.
+
+#### What happened
+
+Ingestion takes `start`, `end` and `backfill_days`, and they are not independent: `[start, end)` is
+the primitive and `--backfill-days N` is sugar meaning `end = now floored to the hour`, `start = end
+- N days`. The two forms are mutually exclusive, `end` alone is meaningless, and neither form may be
+absent.
+
+The question that surfaced this was how to parametrise a test across their combinations. The honest
+answer was that the test was hard to write because the code was wrong: both source modules resolved
+the window themselves, so the rule had two implementations and no single subject to test.
+
+#### The mechanism
+
+**Stacked `@pytest.mark.parametrize` decorators produce a cartesian product.** Three parameters over
+three values each is twenty-seven cases, and when the parameters are dependent, most of those cells
+are not scenarios — they are impossible states. A suite full of impossible states is worse than a
+small one: it is slow, it is unreadable, and its size reads as thoroughness.
+
+The count is the trap. Twenty-seven passing cases feels like coverage; it is one rule exercised
+twenty-seven times in nearby ways, while the cases that actually break the rule — a window spanning
+a daylight-saving transition, a naive timestamp against a tz-aware store, `N = 0` — are absent
+unless somebody thought of them. **Cases are chosen, not generated.**
+
+So when parameters are dependent, the unit of parametrisation is the *scenario*, not the variable:
+one `parametrize` over whole input tuples with `pytest.param(..., id="...")` for readable names, and
+a second table for inputs that must raise. And the structural half matters more than the test half —
+a rule about how parameters relate is a function. Extracted, it is pure, its entire behaviour is a
+small table, and every caller downstream takes the resolved value and cannot disagree about it.
+
+Two mechanical notes from the same corner:
+
+- **A fixture cannot be parametrised with `@pytest.mark.parametrize`.** Marks apply to tests. A
+  fixture varies through `@pytest.fixture(params=[...])` and `request.param`, or by a test
+  parametrising it with `indirect=True`.
+- **A function that reads the clock cannot be tested without owning the clock.** `now` as an
+  injectable parameter turns "the sugar resolves against now" from a flaky assertion into a
+  deterministic one.
+
+#### The practice
+
+1. **If a test is awkward to parametrise, suspect the design before the test.** Awkwardness usually
+   means the rule under test does not live anywhere in particular.
+2. **Extract the relationship between dependent parameters into one function**, and let everything
+   downstream take the resolved value. Duplicated resolution is duplicated rules.
+3. **Parametrise over scenarios, and name them.** `ids` are what make a failure readable in the run
+   output.
+4. **Keep the invalid cases in their own table**, asserting the error rather than the result. They
+   are the half that documents what the interface refuses.
+5. **Assert invariants, not literals**, where the invariant is the actual requirement: `end - start
+   == timedelta(days=n)`, `end.minute == 0`, `start < end`.
+6. **Choose the hard cases deliberately** — boundaries, transitions, zero, and the forms the
+   interface is supposed to reject. Nothing about a parameter matrix will find them for you.

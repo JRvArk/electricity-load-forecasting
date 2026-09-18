@@ -263,6 +263,38 @@ the schema to drift. `tests/tests_build/test_build.py` inherits the same change 
 has not started. The general form is the reason D9 is worth clearing early: keep the red build at
 one cause, or it stops being evidence.
 
+### D23 — The run window is resolved twice, and inclusively
+**Blocks:** decision E, hard convention 1, and testing the window at all.
+
+Two defects in one place, because the second is a consequence of the first.
+
+`create_synthetic_data` and `retrieve_entsoe_data` each resolve `(start, end, backfill_days)` into a
+concrete window: the same `if start is None: assert backfill_days is not None; start = now floored
+minus N days` block appears in both. Decision E made `[start, end)` the primitive and
+`--backfill-days` sugar over it, and sugar resolved independently by every consumer is a rule with
+as many implementations as callers. It is also why the window cannot be tested once: there is no
+single thing to test.
+
+`create_synthetic_data` then builds its index with `pd.date_range(..., inclusive="both")`. A one-day
+window yields **25 rows**, and two adjacent one-day windows both contain the boundary hour:
+
+```
+inclusive=both  -> 25 rows, last=2026-03-02 00:00:00+00:00
+inclusive=left  -> 24 rows, last=2026-03-01 23:00:00+00:00
+adjacent windows overlap at 2026-03-02 00:00:00+00:00
+```
+
+Decision E requires half-open precisely so this cannot happen: an hour covered by two windows is an
+hour the upsert has to repair on every run, and the repair hides whether the upsert is correct.
+
+Validation is by bare `assert` besides, which `python -O` removes — so the hour-alignment checks are
+not present in an optimised interpreter.
+
+**Fix:** one `resolve_window(start, end, backfill_days, now=None) -> tuple[datetime, datetime]`,
+called once before dispatch. Sources receive a resolved half-open window and never see
+`backfill_days`. `inclusive="left"`. Raise rather than `assert`. The injected `now` is what makes
+the sugar testable without depending on the wall clock.
+
 ### D22 — `IngestResult` cannot express the gap decision E made it responsible for
 **Blocks:** Phase 7's missing-hours signal, and Phase 5's run-history table.
 
