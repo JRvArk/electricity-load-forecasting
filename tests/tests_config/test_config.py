@@ -1,19 +1,15 @@
-from forecaster.config import load_config
-from forecaster.config import DEFAULT_CONFIG_PATH
 import pytest
 
-
-def test_load_config_validates():
-    cfg = load_config(path=DEFAULT_CONFIG_PATH)
+from forecaster.config import DEFAULT_CONFIG_PATH, load_config
 
 
-@pytest.fixture
-def cfg():
-    return load_config(path=DEFAULT_CONFIG_PATH)
+@pytest.fixture(scope="session")
+def committed_cfg():
+    return load_config(DEFAULT_CONFIG_PATH)
 
 
-def test_synthetic_entity_length(cfg):
-    assert len(cfg.source.synthetic.entity_ids) >= 2
+def test_synthetic_entity_length(committed_cfg):
+    assert len(committed_cfg.source.synthetic.entity_ids) >= 2
 
 
 # The following test is such that CI and local test suite are red when

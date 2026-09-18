@@ -30,114 +30,40 @@ seasonality plus noise is plenty. The modeling is not the point here.
 import argparse
 import datetime
 import logging
+import sys
 
 import duckdb
-import numpy as np
 import pandas as pd
-from pathlib import Path
-import yaml
-from entsoe import EntsoePandasClient
 
-from forecaster.config import Config, SyntheticCfg, EntsoeCfg, load_config  # noqa: F401  — you'll need these
+from forecaster.config import Config, EntsoeCfg, SyntheticCfg, load_config  # noqa: F401  — you'll need these
 from forecaster.ingestion.ingest_result import IngestResult
+from forecaster.ingestion.sources.entsoe import retrieve_entsoe_data
+from forecaster.ingestion.sources.synthetic import create_synthetic_data
 
 logger = logging.getLogger(__name__)
 
 
-def _create_synthetic_data(
-    synthetic_cfg: SyntheticCfg,
-    backfill_days: int,
-    timestamp_column_name: str,
-    target_column_name: str,
+def _parse_time_arg(time_str: str) -> datetime.datetime:
+    """Parse a time argument in simple format, interpreted as UTC."""
+    try:
+        return datetime.datetime.strptime(time_str, "%Y-%m-%d %H:%M:%S").replace(tzinfo=datetime.timezone.utc)
+    except ValueError:
+        raise argparse.ArgumentTypeError(f"Invalid time format: {time_str}. Expected format: 'YYYY-MM-DD HH:MM:SS'.")
+
+
+def load_data(
+    cfg: Config, start_time: datetime.datetime | None, end_time: datetime.datetime | None, backfill_days: int | None
 ) -> pd.DataFrame:
-    last_hour = datetime.datetime.now(datetime.timezone.utc).replace(minute=0, second=0, microsecond=0)
-    start_time = last_hour - datetime.timedelta(days=backfill_days)
-    end_time = last_hour
-    timestamps = pd.date_range(start=start_time, end=end_time, freq="1h", inclusive="left", tz="UTC")
-    hours = np.arange(len(timestamps))
-    rng = np.random.default_rng(synthetic_cfg.seed)
 
-    daily = synthetic_cfg.daily_amplitude * np.sin(2 * np.pi * (hours % 24) / 24 - np.pi / 2)
-    weekly = synthetic_cfg.weekly_amplitude * (((timestamps.dayofweek < 5).astype(float)) - 0.5) * 2
-    noise = rng.normal(0.0, synthetic_cfg.noise_sd, size=len(timestamps))
-    value = synthetic_cfg.base_load + daily + weekly + noise
+    arg_dict = {}
+    for arg_name, arg_value in [("start", start_time), ("end", end_time), ("backfill_days", backfill_days)]:
+        if arg_value is not None:
+            arg_dict[arg_name] = arg_value
 
-    return pd.DataFrame(
-        {
-            timestamp_column_name: timestamps,
-            target_column_name: value,
-        }
-    )
-
-
-def _retrieve_entsoe_data(
-    backfill_days: int, api_key: str, area_codes: str | list[str], include_tso_forecast: bool
-) -> pd.DataFrame:
-    """Pull hourly actual load for one bidding zone from the ENTSO-E Transparency
-    Platform, optionally alongside the TSO's own day-ahead load forecast.
-
-    Target properties (write tests for these first)
-        - Returns the same raw schema as the synthetic source — the configured
-          timestamp and target columns, hourly, strictly increasing, no duplicates
-          — so the raw table's shape does not depend on the source. That property
-          is what keeps everything downstream source-agnostic.
-        - When ``include_tso_forecast`` is set, one extra column ``tso_forecast``
-          carries the TSO's published day-ahead forecast for the same timestamp.
-          It is a Phase 7 baseline, never a feature: it is not known at the
-          forecast origin for the horizons it covers.
-        - Backfill over ``backfill_days``. Some zones publish quarter-hourly;
-          resample to the configured frequency.
-        - Retry with backoff around the network call (a Phase 5 requirement).
-
-    ``api_token_env`` is the name of the environment variable holding the token;
-    read it here, never log it. Human implements.
-    """
-
-    start = pd.Timestamp(datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=backfill_days))
-    end = pd.Timestamp(datetime.datetime.now(datetime.timezone.utc))
-
-    client = EntsoePandasClient(api_key=api_key)
-    data = pd.DataFrame()
-    for area_code in list(area_codes):
-        df = client.query_load(
-            area_code,
-            start=start,
-            end=end,
-        )
-        df.columns = [area_code]
-        data = pd.concat([data, df], axis=1)
-
-    if include_tso_forecast:
-        for area_code in list(area_codes):
-            df_forecast = client.query_load_forecast(
-                area_code,
-                start=start,
-                end=end,
-            )
-            df_forecast.columns = [f"{area_code}_tso_forecast"]
-            data = pd.concat([data, df_forecast], axis=1)
-
-    return data
-
-
-def load_data(cfg: Config, backfill_days: int) -> pd.DataFrame:
     if cfg.source.kind_cfg.kind == "synthetic":
-        return _create_synthetic_data(
-            synthetic_cfg=cfg.source.synthetic,
-            backfill_days=backfill_days,
-            timestamp_column_name=cfg.domain.timestamp_column,
-            target_column_name=cfg.domain.target_column,
-        )
+        return create_synthetic_data(cfg, **arg_dict)
     elif cfg.source.kind_cfg.kind == "entsoe":
-        secrets_path = cfg.abs_path("secrets/secrets.yaml")
-        with open(secrets_path, "r", encoding="utf-8") as secrets:
-            entsoe_api_key = yaml.safe_load(secrets)["entsoe"]["api-key"]
-        return _retrieve_entsoe_data(
-            backfill_days,
-            api_key=entsoe_api_key,
-            area_codes=cfg.source.entsoe.area_codes,
-            include_tso_forecast=cfg.source.entsoe.include_tso_forecast,
-        )
+        return retrieve_entsoe_data(cfg, **arg_dict)
     else:
         raise ValueError(f"Unknown source: {cfg.source.kind}")
 
@@ -157,11 +83,21 @@ def store_data(
     conn.execute(f"INSERT INTO {table_name} SELECT * FROM incoming")
 
 
-def ingest(cfg: Config, backfill_days: int) -> IngestResult:
+def ingest(
+    cfg: Config, start_time: datetime.datetime | None, end_time: datetime.datetime | None, backfill_days: int | None
+) -> IngestResult:
     start_time_ingestion = datetime.datetime.now(datetime.timezone.utc)
-    logger.info(f"Starting ingestion for {backfill_days} days backfill at {start_time_ingestion}.")
+
+    if start_time is None and end_time is None and backfill_days is None:
+        raise ValueError("Either --start_time, --end_time, or --backfill-days must be specified.")
+
+    arg_dict = {}
+    for arg_name, arg_value in [("start_time", start_time), ("end_time", end_time), ("backfill_days", backfill_days)]:
+        if arg_value is not None:
+            arg_dict[arg_name] = arg_value
+
     try:
-        data_df = load_data(cfg, backfill_days)
+        data_df = load_data(cfg, **arg_dict)
         with duckdb.connect(cfg.storage.duckdb_path) as conn:
             store_data(conn, data_df, cfg.storage.raw_table, cfg.domain.timestamp_column)
         logger.info(f"Ingested {len(data_df)} rows into {cfg.storage.raw_table}.")
@@ -174,8 +110,8 @@ def ingest(cfg: Config, backfill_days: int) -> IngestResult:
             message=f"Error occurred during ingestion: {e}",
             run_start_time=start_time_ingestion,
             run_end_time=datetime.datetime.now(datetime.timezone.utc),
-            data_start_time=None,
-            data_end_time=None,
+            start_time=start_time,
+            end_time=end_time,
         )
 
     logger.info(f"Ingestion completed successfully at {datetime.datetime.now(datetime.timezone.utc)}.")
@@ -186,8 +122,8 @@ def ingest(cfg: Config, backfill_days: int) -> IngestResult:
         message="Ingestion completed successfully.",
         run_start_time=start_time_ingestion,
         run_end_time=datetime.datetime.now(datetime.timezone.utc),
-        data_start_time=data_df[cfg.domain.timestamp_column].min(),
-        data_end_time=data_df[cfg.domain.timestamp_column].max(),
+        start_time=start_time,
+        end_time=end_time,
     )
 
 
@@ -196,8 +132,41 @@ if __name__ == "__main__":
     parser.add_argument(
         "--backfill-days",
         type=int,
-        required=True,
+        required=False,
+        help="Number of days to backfill. If not provided, --start_time must be specified.",
+        default=None,
     )
+    parser.add_argument(
+        "--start_time",
+        type=str,
+        required=False,
+        help="Start time for ingestion in simple format, interpreted as UTC. Example: '2023-01-01 00:00:00'.",
+        default=None,
+    )
+    parser.add_argument(
+        "--end_time",
+        type=str,
+        required=False,
+        help="End time for ingestion in simple format, interpreted as UTC. Example: '2023-01-02 00:00:00'.",
+        default=None,
+    )
+    if not any([arg in ["--backfill-days", "--start_time"] for arg in sys.argv]):
+        parser.error("At least one of --backfill-days, --start_time must be provided.")
     args = parser.parse_args()
+
+    if args.start_time:
+        start_time = _parse_time_arg(args.start_time)
+    else:
+        start_time = None
+
+    if args.end_time:
+        end_time = _parse_time_arg(args.end_time)
+    else:
+        end_time = None
+
     cfg: Config = load_config()
-    ingest(cfg, args.backfill_days)
+
+    ingest_result = ingest(cfg, backfill_days=args.backfill_days, start_time=start_time, end_time=end_time)
+    if ingest_result.error_occurred:
+        logger.error(f"Ingestion failed: {ingest_result.message}")
+        sys.exit(1)

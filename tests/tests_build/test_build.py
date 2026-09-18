@@ -1,18 +1,13 @@
-from forecaster.ingestion.ingest import _create_synthetic_data, store_data
-import pytest
 import duckdb
 import pandas as pd
+import pytest
 
-from forecaster.features.build import (
-    build_features,
-    retrieve_data,
-    persist_features,
-    _compute_lag,
-    _compute_rolling_window,
-    _compute_holiday_feature,
-)
 from forecaster.config import SyntheticCfg, load_config
-
+from forecaster.features.build import (
+    _compute_lag,
+    retrieve_data,
+)
+from forecaster.ingestion.ingest import _create_synthetic_data, store_data
 
 # === Fixtures ===
 
