@@ -156,6 +156,79 @@ the exercise.
 rather than by the phase they break.** Read that file's section when a phase starts: several of its
 entries are an hour in the phase that owns them and a blocked evening in the phase they reach.
 
+## Sessions — where the work happens, and what it needs from you
+
+### Claude Code, in the repo
+
+The default is a **Claude Code session, in the repo**. The problems here are operational and their
+evidence is output that already exists: a container that won't run on the target architecture, a
+unit that works in a shell and dies under the timer, a permissions error three layers down. A chat
+window sees only what gets pasted, and pasting is where the load-bearing detail gets dropped.
+
+Chat is the exception, and it earns its place on the rare question whose answer is in the human's
+understanding rather than in the repo — what a promotion gate is actually protecting against, why a
+drift metric behaves the way it does. There are few of those: this is implementation against
+interfaces that are already fixed. For the same reason the project gets no dedicated synced chat
+project — the substance is code and runtime output, and the parts worth discussing (`reference/`,
+`data/`, the journal on the box) are gitignored or not in the repo at all, so syncing it would share
+the least useful half. Whether the project is worth the time it is taking is not this repo's
+business either (`CLAUDE.md`, *Repo boundary*).
+
+### Short and single-purpose
+
+A long-running session accumulates history irrelevant to the current problem, pays to carry it
+every turn, and when its context is compacted it discards whichever half is not currently hot —
+usually the half that mattered. Three triggers for starting a fresh one, and none of them is "a
+phase ended":
+
+- **The files change.** Phase 3's registry work and Phase 4's Dockerfile share nothing, so
+  re-reading two files costs less than carrying twenty turns about a different part of the tree.
+  Phases 5 and 6 genuinely do overlap — the run-history table feeds loop termination — so those can
+  sit in one session, and a single phase can take three.
+- **The context compacted.** At that point the fine detail being paid for is already gone, so
+  continuing means full price for a summary. Commit, close, reopen.
+- **Before the Phase 6 drills.** A session that just wrote the code will be asked what the
+  traceback means. Start the drills cold, or with no session at all.
+
+Against all three: **stay in the session while a debug loop is live.** Its whole value is that the
+failing output, what was already tried, and why it didn't work are there.
+
+### Two things that do not go to a model at all
+
+Their entire value is in doing them unassisted:
+
+1. **The `reference/` diff.** A complete independent implementation is a better teacher than a
+   conversation, because it is not shaped by how the question was framed. Compare against it before
+   asking anything.
+2. **The Phase 6 failure drills.** Diagnosing from logs *before touching code* is the whole
+   exercise. Asking what a traceback means defects from the one part of this project that is hard
+   to acquire anywhere else.
+
+### What a session needs from you
+
+Nothing carries between sessions or machines except the repo, and the session keeps the repo
+current — the status block, the four logs, the decision register — without being asked. That
+leaves a short list of things only you can supply. Nothing else here needs maintaining by hand.
+
+1. **Open with the state, in one line.** *"Phase 1 pass; `test_ingest.py` mid-rewrite;
+   `resolve_window` not written; suite collects `tests_config` only."* That line is worth ten file
+   reads. If you do not remember it, item 2 is where it was left.
+2. **Close with a commit whose message says what is in flight** — always before leaving a
+   machine. Subject line as usual; then a body line starting `In flight:` naming the drafts, what
+   does not exist yet, and what the suite does. `git log -1` is the first thing the next session
+   reads, and *"move to lenovo"* tells it nothing. Ask the session to write the message if you would
+   rather not — it knows what is in flight.
+3. **Say when a draft is done.** A file you are still writing is off-limits for review and
+   defects; the word *done* is what opens it.
+4. **Review in the files, not in the chat.** Entries are written without asking; your review is
+   the diff of the four logs after a session — edit or strike what is wrong. Silence is agreement,
+   which is what makes the arrangement cheap.
+5. **Answer a blocking question when one is asked**, and expect that to be rare: the session
+   decides for itself whenever the repo lets it, and writes the answer into the register or a log so
+   the question is asked once.
+6. **Keep `reference/` and the drills to yourself.** The session will not do them for you and
+   should not be asked to.
+
 ## Phase roadmap
 
 ### Phase 1 — Ingestion + storage

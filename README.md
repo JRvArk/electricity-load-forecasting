@@ -10,7 +10,8 @@ retraining.
 
 ## Status
 
-**Phase 1 (ingestion) is implemented on the synthetic source**; the live ENTSO-E path is a stub.
+**Phase 1 (ingestion) is implemented on the synthetic source**; the live ENTSO-E path is written
+but does not yet conform to the raw schema (`DEFECTS.md` D17).
 **Phase 2 (features, training) is stubs** — every function body in `build.py` is `pass`, and its
 tests are about a third written. **Phase 3 (registry, serving) is open.** Phases 4–7 are
 unstarted. The remaining work is time-boxed and runs on a Linux VPS rather than a laptop, built in
@@ -25,7 +26,7 @@ so it is clear what runs today and what does not.
 
 ## What it does
 
-- **Idempotent ingestion** *(Phase 1, synthetic source implemented; ENTSO-E path stubbed)* — hourly observations land in DuckDB via upsert on the
+- **Idempotent ingestion** *(Phase 1, synthetic source implemented; ENTSO-E path non-conformant, D17)* — hourly observations land in DuckDB via upsert on the
   timestamp key. Re-running a backfill never duplicates or corrupts rows, and late
   upstream revisions overwrite cleanly.
 - **Reproducible training** *(Phase 2, stubs)* — every model is produced by a tracked MLflow run with

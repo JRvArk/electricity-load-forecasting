@@ -9,19 +9,22 @@ All four are described in *Writing it down*, below.
 
 ## Status — read this before planning anything
 
-Parked 2026-09-01, **un-parked 2026-09-07**. **Phase 1 is implemented on the synthetic source**
-(the ENTSO-E retrieval path is a stub); **Phase 2 is stubs** — every body in `build.py` is `pass`,
-`train.py` likewise, tests about a third written; **Phase 3 is open**; **Phases 4–7 are
-unstarted**. That is one module of seven *(status corrected 2026-09-08; the earlier block
-overstated it)*. The remaining work is **time-boxed**, at 6–12 hrs/wk, run on an x86-64 Linux VPS
-rather than the laptop. **Finishing is a
-hard constraint** — scope that threatens it loses, every time. **Phase 9 is cut** (it had no
-terminal state and this project needs one); **Phase 8 is deferred**, not dismissed. Reasoning and
-the stop rule are in `BUILD_PLAN.md`.
+**Current phase: 1**, in the pass that fixes D17–D23. Phase 1 runs on the synthetic source; the
+ENTSO-E path is written but returns the client's native frame rather than the raw schema
+(`DEFECTS.md` D17), so it cannot yet be run. **Phases 2–7 are unstarted** — `build.py` and
+`train.py` are stubs with tests about a third written. Built in the order **2 → 3 → 5 → 7 → 4 →
+6**; **finished means Phases 1–5 plus 7 with `GET /status` live**. The work is time-boxed at ~95
+hours and runs on an x86-64 Linux VPS; **finishing is a hard constraint** — scope that threatens
+it loses, every time. **Phase 9 is cut; Phase 8 is deferred**, not dismissed. The reasoning, the
+box and the stop rule are in `BUILD_PLAN.md`.
 
-Two consequences for you. **Do not restore Phase 9 or fold it into 4–7**, and do not start
-Phase 8. And **do not add a Linux track, reading list or curriculum** — the phases are the
-curriculum, and a separate learning track has been explicitly refused.
+This block states the phase and what is true of the code, nothing finer: what is outstanding is
+`DEFECTS.md`, what is in flight is `git log -1`. It is kept current by the session that changes
+the status, in the same commit — the human maintains none of it.
+
+Two constraints on you. **Do not restore Phase 9 or fold it into 4–7**, and do not start Phase 8.
+And **do not add a Linux track, reading list or curriculum** — the phases are the curriculum, and a
+separate learning track has been explicitly refused.
 
 ## Repo boundary — everything here is addressed to a reader who has only this repo
 
@@ -30,6 +33,11 @@ curriculum, and a separate learning track has been explicitly refused.
   import reasons from outside the repo: no career targets, employers, courses, or other planning
   documents, and no naming of the places those live. If a reason cannot be stated in terms of this
   codebase, it is not a reason this file should carry.
+- **Nothing about the person.** What the human does for work, what else they spend their time
+  on, what they are aiming at, how they learn — none of it goes in any tracked file, and not in
+  memory either. Budget and rate as planning quantities are fine: "~95 hours" and "6–12 hrs/wk"
+  describe the project, not the week around it. The line is crossed the moment a sentence is
+  about the human rather than about the system.
 - **No forward dates.** A date is allowed only as provenance on a decision already taken
   (*"decided 2026-09-07"*). Everything else is expressed as budget, rate and ordering — "~95
   hours", "6–12 hrs/wk", "queued behind Phase 7" — which is what the plan actually needs in order
@@ -79,54 +87,39 @@ human has already engaged with, and do not write the implementation — that is 
 repo. On the delegated ones — Phase 4 configuration, Phase 7 plumbing — implement against tests
 the human wrote first, and expect the result to be reviewed against them before merge.
 
-## Where the work happens
+Two working agreements. **A file the human is still writing is a draft**: its collection errors
+are not findings, and nothing is filed against it until the human says it is done — when it is
+unclear which files are in flight, ask. **Mechanism before code**: open with the mental model and
+follow with the implementation, not the reverse.
 
-The default for this repo is a **Claude Code session, in the repo**. Its problems are
-operational and their evidence is output that already exists: a container that won't run on the
-target architecture, a unit that works in a shell and dies under the timer, a permissions error
-three layers down. A chat window sees only what gets pasted, and pasting is where the
-load-bearing detail gets dropped.
+**Two things are the human's alone, even when asked.** The diff of their implementation against
+`reference/` — do not read that directory until they have done the diff themselves and bring a
+difference to discuss, since coaching shaped by it pre-empts the one comparison not shaped by how
+the question was framed. And the Phase 6 failure drills — a traceback from a drill is diagnosed
+from logs by the human before any code is touched, so do not interpret it for them. The reasoning
+for both is in `BUILD_PLAN.md`, *Sessions*.
 
-Chat is the exception rather than the rule here, and it earns its place on the rare question
-whose answer is in the human's understanding rather than in the repo — what a promotion gate is
-actually protecting against, why a drift metric behaves the way it does. There are few of those:
-this is implementation against interfaces that are already fixed. For the same reason the project
-gets no dedicated synced chat project — the substance is code and runtime output, and the parts
-worth discussing (`reference/`, `data/`, the journal on the box) are gitignored or not in the repo
-at all, so syncing it would share the least useful half.
+## Sessions — what carries between them, and how one opens
 
-**Sessions are short and single-purpose.** A long-running one accumulates history irrelevant to
-the current problem, pays to carry it every turn, and when its context is compacted it discards
-whichever half is not currently hot — usually the half that mattered. Three triggers for starting
-a fresh session, and note that none of them is "a phase ended":
+Nothing carries between sessions or machines except the repo. Working copies exist on more than
+one machine, with different shells and interpreters, and between them the work lives on the
+remote branch. Claude Code's auto-memory is per machine *and* per checkout path, is never read
+from inside a repo, and `.claude/` is gitignored on purpose — so nothing load-bearing goes there,
+and it is not moved into the tree (that was tried, under `.claude/memory/`, and travelled
+nowhere).
 
-- **The files change.** Phase 3's registry work and Phase 4's Dockerfile share nothing, so
-  re-reading two files costs less than carrying twenty turns about a different part of the tree.
-  Phases 5 and 6 genuinely do overlap — the run-history table feeds loop termination — so those
-  can sit in one session, and a single phase can take three.
-- **The context compacted.** At that point the fine detail being paid for is already gone, so
-  continuing means full price for a summary. Commit, close, reopen.
-- **Before the Phase 6 drills.** A session that just wrote the code will be asked what the
-  traceback means. Start the drills cold, or with no session at all.
+A fresh session opens from three reads and no survey: this file; `git log -1`, whose message
+says what is in flight by agreement with the human (`BUILD_PLAN.md`, *What a session needs from
+you*); and the `DEFECTS.md` section for the current phase. If the human's first message states
+where things are, that line wins over all three. If none of it yields the line "Phase N, here is
+the state", the gap is in the repo and is closed in the repo. Stay in a session while a debug
+loop is live — the failing output and what was already tried are its whole value — and when the
+context compacts, say so and suggest commit-close-reopen.
 
-Against all three: **stay in the session while a debug loop is live.** Its whole value is that the
-failing output, what was already tried, and why it didn't work are here.
-
-A fresh session opens by *stating* where things are — "Phase 5, the timer fires but the unit exits
-203" — not by asking for a survey. That one line is worth ten file reads.
-
-**Two things do not go to a model at all**, because their entire value is in doing them
-unassisted:
-
-1. **The `reference/` diff.** A complete independent implementation is a better teacher than a
-   conversation, because it is not shaped by how the question was framed. Compare against it
-   before asking anything.
-2. **The Phase 6 failure drills.** Diagnosing from logs *before touching code* is the whole
-   exercise. Asking what a traceback means defects from the one part of this project that is hard
-   to acquire anywhere else.
-
-Whether this project is worth the time it is taking is not this repo's business — see
-*Repo boundary*.
+The human hand-maintains nothing here. The status block, the four logs and the decision register
+are kept current by the session that changes them, in the same commit. Ask only when a choice
+cannot be made from the repo, and then write the answer into the file rather than leaving it in
+the conversation — see *Writing it down*.
 
 ## Writing it down — immediately, and in the right file
 

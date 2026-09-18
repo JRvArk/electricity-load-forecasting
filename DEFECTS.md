@@ -417,6 +417,33 @@ tool that resolves them floats.
 
 **Fix:** pin a version tag.
 
+### D24 — The environment that runs the tests is not the environment that was locked
+**Blocks:** nothing yet; it is hard convention 2 applied to the toolchain, and it is a second way
+for CI to go red on a commit that changed nothing (L4).
+
+Two gaps with the same shape: the repo states an environment and then tests in a different one.
+
+**The interpreter.** `pyproject.toml` says `requires-python = ">=3.11"` and nothing narrows it — no
+`.python-version`, no upper bound. `uv sync` therefore takes whichever compatible interpreter it
+finds, and on one working copy that is a managed **3.12**; CI asks `setup-python` for **3.11** and
+the Dockerfile is `python:3.11-slim`. Anything 3.12-only — a PEP 695 `type` alias, a quote reused
+inside an f-string — passes locally and fails in CI as a syntax error in code that just ran. Found
+by reading the venv path in a local traceback (`cpython-3.12.12`) against `ci.yml`.
+
+**The dependency set.** Every working copy installs with `uv sync`, which installs `uv.lock`
+exactly. CI installs with `pip install -e ".[dev]"`, which resolves afresh from the ranges in
+`pyproject.toml` and never reads the lockfile. So the lockfile — the reproducibility claim the repo
+makes about its dependencies — is the one thing CI does not test, and a new pandas or DuckDB
+release lands in CI on the morning it is published, on a commit that touched nothing. That is the
+D9 failure shape arriving from outside the repo: a red build with no local reproduction.
+
+**Fix:** a `.python-version` naming `3.11`, so `uv`, CI and the image agree on one interpreter —
+one file, can land any time. And CI installs through `astral-sh/setup-uv` with
+`uv sync --locked --extra dev`, then runs `uv run ruff check .` and `uv run pytest -q`, so what CI
+tests is what the lockfile says. `--locked`, not `--frozen`: the first fails when the lock has
+fallen behind `pyproject.toml`, the second installs the stale lock without a word — and CI is the
+one place a forgotten re-lock should be loud. The four postures are `LEARNINGS.md` L6.
+
 ### ~~D14 — `docker-compose.yml` promised a Prefect worker~~
 **Fixed** in `6262897`. The comment survived the decision to drop Prefect for systemd timers and
 told a reader to extend the compose file with a worker that is not part of the design.

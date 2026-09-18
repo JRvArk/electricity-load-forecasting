@@ -376,3 +376,61 @@ Two mechanical notes from the same corner:
    == timedelta(days=n)`, `end.minute == 0`, `start < end`.
 6. **Choose the hard cases deliberately** — boundaries, transitions, zero, and the forms the
    interface is supposed to reject. Nothing about a parameter matrix will find them for you.
+
+
+### L6 — A lockfile pins only the paths that read it
+**Pays off in:** Phase 4, where CI and the image become what the repo asks a reader to trust, and
+Phase 5, where the unit on the box is a fourth environment built by a fourth path.
+
+#### What happened
+
+A local pytest traceback named the interpreter it ran under — a `uv`-managed **3.12** — and
+`ci.yml` asks `setup-python` for **3.11**. Reading on: CI installs with `pip install -e ".[dev]"`,
+which resolves from the version ranges in `pyproject.toml`, while every working copy installs with
+`uv sync`, which installs `uv.lock` exactly. So the two greens the repo relies on — "passes here"
+and "passes in CI" — were claims about two different environments, and the lockfile, the artifact
+that exists to make them one environment, was read by one of them. Filed as `DEFECTS.md` D24.
+
+Nothing had broken. That is the point: the gap is invisible until a dependency releases or a
+3.12-only construct gets written, and then the failure arrives on a commit that changed nothing,
+with no local reproduction.
+
+#### The mechanism
+
+An environment is not something a repo *has*; it is the output of a **path** — an installer,
+reading some spec, on some interpreter. This repo has four such paths: a working copy, the CI job,
+the image build, and eventually the scheduled unit. "Reproducible" is a property of the set, and
+the set is as pinned as its least-pinned member. A lockfile that one path reads and another ignores
+has pinned one machine.
+
+Two distinct things need pinning, and a lockfile does only one of them. It resolves the
+**packages** — for the whole `requires-python` range, so it is equally valid on 3.11 and 3.12 and
+says nothing about which one runs. The **interpreter** is pinned separately (`.python-version`) or
+not at all.
+
+And the paths that do read the lockfile can hold it in different postures, which only differ in
+the case that matters — someone edited `pyproject.toml` and did not re-lock:
+
+| posture | with a stale lock | belongs in |
+|---|---|---|
+| **ignore** — `pip install -e .` | never sees it; resolves from ranges | nowhere the lock is the claim |
+| **trust** — `uv sync --frozen` | installs it silently; the environment lags the spec | an image build that copied the lock in and should build exactly that |
+| **verify** — `uv sync --locked` | **fails**, naming the lock as stale | CI — the one place a forgotten re-lock should be loud |
+| **re-lock** — bare `uv sync` | re-resolves and rewrites the lock | a working copy, where re-locking is the intended act |
+
+The failure shape when this is wrong is L4's: a check that transitions for a reason that is not
+the code. A red CI run on a docs-only commit is the environment moving under the check, and the
+first question is which path built it, not what the commit changed.
+
+#### The practice
+
+1. **Enumerate the paths that build an environment** — laptop, CI, image, box — and check that
+   each reads the same pin. Reproducibility is the minimum over that list, not the best case.
+2. **Pin the interpreter and the packages separately**; the lockfile only does the second.
+3. **Choose the posture per path deliberately.** Verify in CI, trust in an image build, re-lock on
+   a working copy. A stale lock should fail exactly once, in CI, and never be installed silently or
+   rewritten silently anywhere a human is not watching.
+4. **Two greens in two environments are two claims.** They compose into one guarantee only when the
+   environments are the same, and the evidence for that is the pin, not the greens.
+5. **A red on a commit that changed nothing is an environment question first** — the same order as
+   the Phase 6 drills: rule out the world before reading the code.
