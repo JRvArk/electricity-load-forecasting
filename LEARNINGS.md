@@ -503,3 +503,76 @@ Two facts from the same corner:
    should not have to know whether it did.
 4. **Keep `assert` for the tests**, where it is the better tool, and let the directory boundary
    carry the rule.
+
+
+### L8 — A fixture is a dependency; `parametrize` is a multiplier
+**Pays off in:** Phase 2, whose feature tests need a populated store as a dependency and horizons
+as cases; Phase 3, where the app under test is a fixture and the registry is monkeypatched; and
+every phase after, since `monkeypatch`, `tmp_path` and `caplog` are how the rest of the suite
+stays offline.
+
+#### What happened
+
+The ingest test rewrite hit `Failed: Marks cannot be applied to fixtures` at collection — a
+`@pytest.mark.parametrize` stacked on a `@pytest.fixture`, trying to give a fixture cases. The
+same file had reached L5's 27-cell product by a different route: three fixtures with `params=`,
+one per window argument, each multiplying every test that requested it. And a fixture requested a
+`days` fixture that existed only in a sibling test module, which is not a place fixture lookup
+goes. All three come from one confusion: two mechanisms that both put values into a test's
+parameters, and do different jobs at different times.
+
+#### The mechanism
+
+**A fixture answers "what does this test need?"** Each parameter name on a test is a *request*;
+pytest resolves it by name, walking from the test module up through each `conftest.py` above it
+to plugins and built-ins — never sideways into a sibling module, and nearest definition wins,
+silently. Fixtures request other fixtures, so a graph is resolved per test, then setup runs,
+the test runs, and teardown (everything after `yield`) runs in reverse, even on failure.
+
+**`@pytest.mark.parametrize` answers "how many times, with what inputs?"** It multiplies one
+function into N collected items with the listed values bound directly — no lookup, no provider.
+It happens at **collection**, before any fixture is resolved. That ordering is why a mark cannot
+go on a fixture: marks are metadata on *test items*, and a provider function is never one. It is
+also why the resolution rule per parameter reads: supplied by parametrize → bind it; otherwise
+find a fixture; neither → `fixture not found`.
+
+The two overlap in **`@pytest.fixture(params=[...])`**, which moves the multiplier into the
+provider. Every test that requests that fixture runs once per value, and so does every test
+requesting a fixture that requests it — transitive, and invisible at the test. That is right when
+the values are independent and every consumer should see each one; it is wrong when the values
+are dependent (a window is one thing, not three) or only some tests care. Then the test owns the
+cases, and a fixture that must vary per case takes them through **`indirect=True`** (the value is
+routed into a fixture of the same name via `request.param`) or, more simply, is a **factory** —
+a fixture that returns a function, so each test calls it with the input that test needs and
+nothing is multiplied.
+
+**Scope** is the other axis. A session-scoped fixture is built once per run; a function-scoped
+one per test. Anything tests *write to* — a DuckDB connection — stays function-scoped, or tests
+start depending on which ran first. A higher scope cannot request a lower one (`ScopeMismatch`);
+a session fixture wanting a temp file uses `tmp_path_factory`. `autouse=True` runs without being
+requested, after collection, for side effects only (L2).
+
+The rest of the `@pytest.mark` family is metadata of other kinds: `skip`/`skipif` (do not run),
+`xfail` (expected failure — with `strict=True`, or a test that starts passing stays quietly
+marked broken, L4 in miniature), `usefixtures` (a side-effect fixture without an argument),
+`filterwarnings`, and registered custom marks selected with `-m`. `pytest.param(..., id=...,
+marks=...)` is what makes a scenario table readable in the run output.
+
+Built-ins this repo depends on: `tmp_path` (a fresh directory per test — every bare
+`duckdb.connect()` is a *separate* in-memory database, so two connections need a file),
+`monkeypatch` (`setenv` for a credential, `setattr` to replace a client method with a fake,
+`chdir` — all undone at teardown), `request` (only meaningful inside a fixture), and `caplog`
+(captured log records — how "names the variable, never the value" gets asserted).
+
+#### The practice
+
+1. **Fixtures for fixed dependencies, `parametrize` for chosen cases.** Config, a fresh
+   connection, a factory are fixtures; windows, malformed frames, exception types are cases.
+2. **Never a `params=` fixture for a dependent parameter**, and be aware that one multiplies
+   every consumer, transitively. If only some tests care, the cases belong on those tests.
+3. **A fixture that must vary per case is a factory or `indirect=True`** — not a marked fixture,
+   which is an error, and not a fixture per value, which is a matrix.
+4. **Match scope to mutability.** Read-only and expensive: session. Written to: function.
+5. **Shared fixtures live in the `conftest.py` above every module that uses them**; lookup goes
+   up, not sideways, and a nearer same-named fixture shadows without warning.
+6. **`xfail` is `strict=True`** or it becomes a permanent hidden green.
