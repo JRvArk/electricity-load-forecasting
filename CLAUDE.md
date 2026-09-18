@@ -110,7 +110,10 @@ nowhere).
 
 A fresh session opens from three reads and no survey: this file; `git log -1`, whose message
 says what is in flight by agreement with the human (`BUILD_PLAN.md`, *What a session needs from
-you*); and the `DEFECTS.md` section for the current phase. If the human's first message states
+you*); and the `DEFECTS.md` section for the current phase. When writing that message: an
+`In flight:` line describes committed, unfinished work — never the working tree, which no other
+machine can see — and goes on the commit that carries the drafts, which is the last one before a
+machine switch, not a mid-session commit of something else. If the human's first message states
 where things are, that line wins over all three. If none of it yields the line "Phase N, here is
 the state", the gap is in the repo and is closed in the repo. Stay in a session while a debug
 loop is live — the failing output and what was already tried are its whole value — and when the
@@ -156,8 +159,11 @@ Route it by what kind of thing it is:
   across to any other phase that needs it.
 
 The bar for "settled" is low: if a question was answered and the answer changes what someone does,
-it belongs in one of the four. Then the commit that follows cites the entry — **if it exists only
-in a conversation, it is not decided.**
+it belongs in one of the four — **and an explanation given as coaching counts.** A mechanism the
+human asked about and now understands is a `LEARNINGS.md` entry in the same turn; that they
+understood it is not the test, because understanding leaves with the window. The test is whether
+the next session would have to re-derive it. Then the commit that follows cites the entry — **if it
+exists only in a conversation, it is not decided.**
 
 An entry that would need this conversation in order to make sense is not finished. Each one is
 written for a reader who has the repo and nothing else, which is the same standard as

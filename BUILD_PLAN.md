@@ -213,11 +213,15 @@ leaves a short list of things only you can supply. Nothing else here needs maint
 1. **Open with the state, in one line.** *"Phase 1 pass; `test_ingest.py` mid-rewrite;
    `resolve_window` not written; suite collects `tests_config` only."* That line is worth ten file
    reads. If you do not remember it, item 2 is where it was left.
-2. **Close with a commit whose message says what is in flight** — always before leaving a
-   machine. Subject line as usual; then a body line starting `In flight:` naming the drafts, what
-   does not exist yet, and what the suite does. `git log -1` is the first thing the next session
-   reads, and *"move to lenovo"* tells it nothing. Ask the session to write the message if you would
-   rather not — it knows what is in flight.
+2. **Before leaving a machine, commit everything — drafts included — and let that commit say
+   what is in flight.** Work that is not committed does not exist on the other machine, so a
+   draft travels only as a commit; a WIP commit on a feature branch is fine. Subject line as
+   usual; then a body line starting `In flight:` describing what is *in the commit* and
+   unfinished — which files are drafts, what does not exist yet, what the suite does. Never the
+   state of a working tree: no other machine can see it, and a commit message describes the
+   commit. The line belongs on the last commit before the switch, not on a mid-session one that
+   does not carry the drafts. `git log -1` is the first thing the next session reads, and *"move
+   to lenovo"* tells it nothing. Ask the session to write the message if you would rather not.
 3. **Say when a draft is done.** A file you are still writing is off-limits for review and
    defects; the word *done* is what opens it.
 4. **Review in the files, not in the chat.** Entries are written without asking; your review is

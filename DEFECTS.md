@@ -30,7 +30,8 @@ The one implemented module, so these are live rather than latent.
 ### D1 — The synthetic series is a function of row position, not of timestamp
 **Blocks:** the Phase 1 done-criterion, and Phase 7.
 
-`_create_synthetic_data` builds `hours = np.arange(len(timestamps))` and derives the daily term
+`create_synthetic_data` (now in `ingestion/sources/synthetic.py`; `_create_synthetic_data` when
+this was filed) builds `hours = np.arange(len(timestamps))` and derives the daily term
 from `hours % 24`. That index starts at the window's first row, and the window starts at
 `now()` floored to the hour minus the backfill, so the daily phase is anchored to **the hour the
 job happens to run**. The noise is drawn positionally from the seeded generator, so it moves the
@@ -53,6 +54,13 @@ tests, CI and every offline demonstration use — it does.
 of the timestamp (seed per row from the epoch hour, or hash the timestamp) rather than of the row
 index. The generator should be a pure function of the timestamp and the config, and nothing else.
 
+*Amended after decision D.* The function still reads none of `entity_ids` and emits no entity
+column — one unnamed series, whatever the config lists. Under the long schema it produces one
+series **per entity**, and the pure function is of *(timestamp, entity, config)*: the entity has to
+enter the value — an offset, or the seed — so that the two configured series **differ**. Two
+identical series carry the entity column and still cannot fail a test that mixes them up, which is
+the bug decision D's two-entity rule exists to catch.
+
 ### D2 — No test pins the property D1 breaks
 **Blocks:** D1's fix landing safely.
 
@@ -66,16 +74,11 @@ upsert correctly and never touches the composition that fails.
 overlaps it, and asserts the overlapping timestamps carry identical values. That is the property
 the done-criterion is really asserting, and no current test can fail on it.
 
-### D3 — A failed ingest reports success
-**Blocks:** Phase 5.
-
-`ingest()` is annotated `-> None` and returns an `IngestResult`. It catches every exception,
-returns a result with `error_occurred=True`, and the `__main__` block discards the return value
-and falls off the end — exit code 0. Anything that reads exit codes, which is what a scheduler
-does, sees a clean run.
-
-**Fix:** correct the annotation, and exit non-zero from the entry point when `error_occurred` is
-set. A timer that cannot see failure has no failure to log, and the log is the Phase 6 exercise.
+### ~~D3 — A failed ingest reports success~~
+**Fixed** in `842f03e`. `ingest()` was annotated `-> None` while returning an `IngestResult`, and
+the `__main__` block discarded the result and fell off the end with exit code 0, so a scheduler
+saw every failed run as clean. The annotation is now `-> IngestResult` and the entry point exits 1
+when `error_occurred` is set. What the result *can* say about a failure is still D22.
 
 ### D4 — Relative paths are resolved against the process's working directory
 **Blocks:** Phase 5.
@@ -95,11 +98,16 @@ to teach it — but it is cheaper to fix here than to diagnose there.
 
 `CREATE TABLE IF NOT EXISTS <table> AS SELECT * FROM incoming WHERE 1=0` gives the table whatever
 columns the first incoming frame had; every later write is `INSERT INTO <table> SELECT * FROM
-incoming`, which is positional. Turning on the TSO forecast column adds a column to the incoming
-frame and the insert fails on arity against a table created without it.
+incoming`, which is positional. Any frame with a column the table lacks fails on arity; any frame
+with the same columns in a different order is inserted **silently misaligned**.
 
-The defect is in Phase 1 and it detonates in Phase 7, which is the reason it is filed here: it is
-an hour now, against a blocked evening and a populated database to migrate later.
+*Amended.* The trigger named when this was filed — turning on the TSO forecast column — is no
+longer the design: the forecast has its own table (`storage.raw_tso_table`, D26). The live trigger
+is nearer: D17 adds the entity column, and the existing `data/forecast.duckdb` was created from a
+two-column frame. The first ingest after D17 lands fails on arity against that table, or — if the
+database is deleted to get past it — the failure is deferred to the next column Phase 7 adds. So
+this is filed in Phase 1 rather than Phase 7 for the same reason as before: an hour now, against a
+blocked evening and a populated database to migrate later.
 
 **Fix:** insert by explicit column list, and reconcile the table's columns with the incoming
 frame's — add missing columns rather than assuming a match.
@@ -178,6 +186,15 @@ two zones is not globally monotonic, so a bare `is_monotonic_increasing` check r
 frame; the property is per entity, and the entity column is part of the contract rather than an
 extra.
 
+*Status after `842f03e`.* The **signature half is done**: both sources live under
+`ingestion/sources/` and take `(cfg, start, end, backfill_days)`, so each can see the configured
+column names. The **contract half is not**, and no frame either source produces would pass the
+assertion: `synthetic.py` emits timestamp and target with no entity column (D1, amended);
+`entsoe.py` still returns the timestamp in the index, names its entity column `entity_id_observed`
+by hand rather than reading `cfg.domain.entity_column`, and carries forecast rows (D26). The
+assertion is what makes those three failures one error message at the dispatcher instead of a
+DuckDB cast error two functions later.
+
 ### D18 — A frame without the timestamp column truncates the raw table instead of failing
 **Blocks:** hard convention 1, and any history Phase 7 accumulates.
 
@@ -225,7 +242,8 @@ requires fixtures to carry at least two entities.
 columns needs a row constructor or an `EXISTS`/`USING` form rather than a scalar subquery — qualify
 its columns while rewriting it (D18), and wrap it with the insert in one transaction (D6). Pin it
 with a test that stores two entities, re-stores one of them alone, and asserts the other's rows
-survive with their values unchanged.
+survive with their values unchanged. Two documents state the old key and go with the fix: the
+README ("upsert on the timestamp key") and `ingest.py`'s docstring ("Key on the timestamp column").
 
 ### D21 — The test suite does not collect, behind a CI check that was already red
 **Blocks:** every test in the repo, and the Phase 1 pass's own red-to-green.
@@ -262,6 +280,14 @@ D's two entities already live there, and a fixture that builds its own config is
 the schema to drift. `tests/tests_build/test_build.py` inherits the same change although its phase
 has not started. The general form is the reason D9 is worth clearing early: keep the red build at
 one cause, or it stops being evidence.
+
+*Status after `842f03e`.* The `_DEFAULT_CONFIG_PATH` import is fixed and `conftest.py` sets
+`FORECASTER_CONFIG` at module scope (L2). Still open: `FORECASTER_DUCKDB_PATH` is not set there,
+so any test that lets `ingest()` open `cfg.storage.duckdb_path` reaches `data/forecast.duckdb`;
+and `test_build.py` now fails collection one rename later — it imports `_create_synthetic_data`
+from `ingestion.ingest`, which is `create_synthetic_data` in `ingestion/sources/synthetic.py` with
+a `cfg` parameter — while still constructing `SyntheticCfg` without `entity_ids`. The ingest test
+module is mid-rewrite; its half of this entry is re-checked when that lands.
 
 ### D23 — The run window is resolved twice, and inclusively
 **Blocks:** decision E, hard convention 1, and testing the window at all.
@@ -300,8 +326,11 @@ the sugar testable without depending on the wall clock.
 
 Decision E states that `IngestResult` "records the resolved window alongside the realised extent,
 because the gap between requested and landed is the missing-hours signal Phase 7 reads". The model
-as written carries `backfill_days`, `data_start_time` and `data_end_time`, and none of the three
-does that job:
+as filed carried `backfill_days`, `data_start_time` and `data_end_time`, and none of the three
+did that job. *(Since `842f03e` it carries `backfill_days` and the requested `start_time` /
+`end_time` — each `None` when the other form was used — and the realised-extent fields are gone
+rather than fixed, so the object now says even less: nothing about what landed at all. The
+analysis below stands; the fix is unchanged.)*
 
 - **`backfill_days` is the sugar, not the primitive.** It cannot express a window that did not end
   at `now()` — which is every re-ingest of a historical range, the case the done-criterion is built
@@ -331,6 +360,46 @@ window from a complete one without storing the missing hours themselves. And giv
 assertion its own exception type, caught separately, so the result records *which* fatal outcome
 occurred rather than only that one did.
 
+### D25 — The ENTSO-E adapter passes the variable's name as the token
+**Blocks:** any run on `kind: entsoe`, and recording the fixture D17's live-source tests need.
+
+`sources/entsoe.py` constructs `EntsoePandasClient(cfg.source.kind_cfg.api_key_env)`. That field
+holds the **name** of the environment variable — `ENTSOE_TOKEN` — by design (`LEARNINGS.md` L1:
+config names a secret and never contains it), so the client sends the literal string
+`securityToken=ENTSOE_TOKEN` and every call is refused. The failure will present as a
+`requests.HTTPError`, which decision G's table maps to "bad token, 5xx, network" — correctly, but
+the cause is a missing line here, not a credential.
+
+Before the move to `sources/`, the adapter read a yaml file under `secrets/`. L1 records that
+file's migration to the environment and says the code reads the value at the point of use — but
+`git log -S"os.environ["` over the ingestion package is empty on every branch: that read was never
+committed. L1 is the design; this is the code not yet matching it.
+
+**Fix:** `os.environ[cfg.source.entsoe.api_key_env]` at the point of use, raising a message that
+names the variable and never its value when it is absent (L1, practice 5). Pin it with the fake
+client D17's exception-mapping tests already need: set the variable with `monkeypatch`, and assert
+the client was constructed with the environment's value, not the config's string.
+
+### D26 — The ENTSO-E adapter lands the TSO forecast in the observations frame
+**Blocks:** D17's assertion ever passing on the live source, and Phase 7's secondary baseline.
+
+With `include_tso_forecast: true`, `retrieve_entsoe_data` concatenates the rows of
+`query_load_forecast` onto the same frame as the actual load, tagging them with a second entity
+column, `entity_id_tso_forecast`, while the observations carry `entity_id_observed`. The result has
+two half-null entity columns and forecast rows interleaved with observations under one target
+column, and it goes to `raw_observations`. `StorageCfg.raw_tso_table` exists precisely so that it
+does not: *"a forecast is not an observation, and toggling it must not change the raw table's
+schema"*. The config comment beside the flag still says "column", which is the design this code
+implemented and the one the storage model replaced.
+
+The defect is separate from D17, which is the shape of a frame, because the fix is a second
+**destination**: the assertion can reject this frame, but only a routing decision fixes it.
+
+**Fix:** the source returns the two series separately, each conforming to the same contract —
+timestamp, entity, value — and `ingest` upserts the second into `raw_tso_table` through the same
+`store_data` and the same (timestamp, entity) key. How the adapter returns two frames is the
+human's interface call; that it returns two is not. Fix the config comment in the same commit.
+
 ---
 
 ## Phase 2 — Features + training
@@ -348,6 +417,12 @@ reading the repo.
 **Fix:** write the tests, which is the phase. If the phase runs long, the interim option is a
 scoped per-file ignore with a comment saying why — never a blanket one, and never by deleting the
 imports, which are the phase's own to-do list.
+
+*Status.* The four `F401`s are gone — those imports were removed — and the check is still red,
+now from the in-flight ingest test rewrite (an `I001` and five `F821`s that resolve when it
+lands), with the collection errors in D21 queued behind it. Three causes in sequence, and the
+check never transitioned once, which is L4 measured rather than predicted. Still filed here
+because the Phase 2 tests are what eventually make it green for a reason rather than by absence.
 
 ### D10 — `test_compute_lag` will error rather than fail
 **Blocks:** the first green run of this phase.
@@ -383,6 +458,15 @@ tracked run is written.
 **Fix:** decide and state it — config wins and the compose variable goes, or the environment wins
 and the config key is documented as a default. Either is defensible; having both is not.
 
+*Amended after decision F.* The mechanism is now decided: the environment may override this one
+value, through the allowlisted `FORECASTER_MLFLOW_TRACKING_URI`, which `config.py` writes into the
+tree before validation. That leaves two concrete steps. `docker-compose.yml` still sets
+`MLFLOW_TRACKING_URI` — MLflow's own variable, which bypasses config entirely — and must set the
+allowlisted one instead. And `train.py`, when written, must take the URI from
+`cfg.mlflow.tracking_uri` and pass it to `mlflow.set_tracking_uri()` explicitly, never rely on
+MLflow reading the environment itself: the override is only visible in a run record if it went
+through config.
+
 ---
 
 ## Phase 4 — Packaging
@@ -413,9 +497,11 @@ matches the committed one. Cheapest version is a step in the Phase 4 workflow th
 
 `COPY --from=ghcr.io/astral-sh/uv:latest` puts an unpinned dependency into the build of a repo
 whose first hard convention is reproducibility. The lockfile pins the Python dependencies and the
-tool that resolves them floats.
+tool that resolves them floats. `docker-compose.yml` has the same defect one service over:
+`image: ghcr.io/mlflow/mlflow:latest` — and that one is the tracking server, so a floating tag
+there can change the registry's behaviour under a promotion gate that was tested against another.
 
-**Fix:** pin a version tag.
+**Fix:** pin a version tag on both.
 
 ### D24 — The environment that runs the tests is not the environment that was locked
 **Blocks:** nothing yet; it is hard convention 2 applied to the toolchain, and it is a second way
@@ -457,8 +543,8 @@ row-per-request pagination, which is not the shape of the current one.
 
 ## Inherited, not restated
 
-- **Phase 5** cannot demonstrate what it is for until **D3** and **D4** are fixed: a scheduler that
-  cannot observe failure, pointed at a database that may not be the real one.
+- **Phase 5** cannot demonstrate what it is for until **D4** is fixed (D3, its companion, is
+  done): a scheduler pointed at a database that may not be the real one.
 - **Phase 7** cannot accumulate a trustworthy history until **D1** and **D5** are fixed: a headline
   that moves retroactively, and a schema that rejects the column the phase adds.
 

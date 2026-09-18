@@ -48,6 +48,12 @@ It was migrated to `~/.config/forecaster/env`, mode `600` in a directory of mode
 repo copy deleted. `config/config.yaml` names the variable — `source.entsoe.api_key_env:
 ENTSOE_TOKEN` — and the code reads the value from the environment at the point of use.
 
+*Correction.* That last clause described the design, not the tree: the environment read was never
+committed, and the adapter as moved to `sources/entsoe.py` passes the variable's *name* to the
+client — `DEFECTS.md` D25. The mechanism below is unchanged; what it shows is that a migration
+done in a working copy and described in a log is not the same as one that landed, and the
+check is `git log -S` on the tree, not the memory of having done it.
+
 #### The mechanism: what 600 and 700 mean
 
 A Unix file has three sets of permissions — **owner**, **group**, **everyone else** — and each set
@@ -434,3 +440,66 @@ first question is which path built it, not what the commit changed.
    environments are the same, and the evidence for that is the pin, not the greens.
 5. **A red on a commit that changed nothing is an environment question first** — the same order as
    the Phase 6 drills: rule out the world before reading the code.
+
+
+### L7 — `assert` is a claim about your own code; `raise` is a rule about the world
+**Pays off in:** Phase 3, where a raised type becomes an HTTP status and an `AssertionError`
+becomes a 500; Phase 5, where a unit's exit code is derived from *which* exception escaped; and
+Phase 6, whose drills start from a log line — `AssertionError` is the one that says nothing.
+
+#### What happened
+
+Both source modules validated their window with bare `assert` — start on the hour, end on the
+hour, `backfill_days` present — and `DEFECTS.md` D23 noted in passing that `python -O` removes
+them. The question came back with weight while the D17 conformance check was being written in the
+dispatcher: is the check on the frame an `assert` or an `if … raise`? D17 had already answered it
+without saying so. The check has to run on the box, on every ingest, because the failure it
+catches is the day the source stops looking like the fixture; and D22 needs to tell that failure
+apart from a dead network. Neither is something an `assert` can do.
+
+#### The mechanism
+
+`assert` is a debugging aid the interpreter is *permitted to delete*. Under `python -O`, or with
+`PYTHONOPTIMIZE=1` in the environment — which a unit file or a container can set without touching
+the code — every `assert` statement is compiled out: condition, message, side effects, all of it.
+So an `assert` says, to the reader and to the interpreter alike, "this may be skipped without
+changing what the program means". For an invariant of your own logic that is true: skipping
+"after this loop `i == n`" changes nothing for a correct program. For a check on input it is
+false: skipping "the frame is hourly" changes the program from one that rejects malformed frames
+to one that stores them.
+
+The second half is the type. Every `assert` raises `AssertionError`, so a caller cannot tell "not
+hourly" from "not sorted" from someone's `assert x is not None` three modules away. A `raise`
+names a class, and that class is part of the function's *interface*: it is what a caller catches,
+what a result object records, what an exit code is derived from, and what appears on the first
+line of the log. The distinction D22 draws — a contract violation is deterministic and ours, a
+failed call is contingent and the world's — exists at runtime only if the two are different
+types.
+
+The heuristic that decides between them: **whose fault is it when this fires?** If a bug in the
+function being written — `assert`. If the input, the caller, or the environment — `raise`, with
+a type that names the contract. The conformance check is the interesting case because a violation
+*is* our bug (the adapter is wrong), yet it is detected on external data at runtime and must never
+be skippable; that makes it a contract check, and the fault heuristic asks who broke the
+contract, not who will fix it.
+
+Two facts from the same corner:
+
+- **In tests, `assert` is exactly right.** pytest rewrites `assert` statements at import to
+  report both sides of a failed comparison, and no one runs a suite under `-O`. The same project
+  therefore uses both, split by directory: `raise` under `src/`, `assert` under `tests/`.
+- **`assert (cond, "message")` never fails.** A parenthesised pair is a two-tuple, and a non-empty
+  tuple is truthy. The form is `assert cond, "message"`; the parentheses, if any, go around the
+  message alone. Linters flag it; it is worth knowing why.
+
+#### The practice
+
+1. **`assert` for invariants of the code being written; `raise` for contracts on what it
+   receives.** If deleting the check would change behaviour for any *valid* program, it is not an
+   assert.
+2. **Give a contract its own exception type**, and treat that type as interface: it is what
+   callers, result objects, exit codes and log lines are built from.
+3. **Assume something upstream may set `-O`.** Not because it is likely, but because the code
+   should not have to know whether it did.
+4. **Keep `assert` for the tests**, where it is the better tool, and let the directory boundary
+   carry the rule.
