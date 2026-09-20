@@ -24,19 +24,39 @@ Values arrive in three layers, in increasing precedence:
 
 Secrets are in none of them: config carries the *name* of the variable holding a
 credential, never the credential, so no dump of this object can leak one.
+
+**What is validated here, and what is not.** Validation at load exists for values
+that would otherwise fail *later* or *silently*: names that reach SQL by
+interpolation, numbers numpy or sklearn reject at first use, fields that must
+differ from each other, a step size the rest of the config assumes, and keys
+that nothing reads (`extra="forbid"` everywhere — a key nobody reads looks like
+configuration and is not). Facts about the environment — whether a path exists,
+whether a URI is reachable — are not checked here; they are runtime facts and
+belong to the code that opens them.
 """
 
 from __future__ import annotations
 
 import logging
 import os
+import re
 from functools import lru_cache
 from importlib.resources import files
 from pathlib import Path
-from typing import Literal
+from typing import Annotated, Literal
 
 import yaml
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import (
+    AfterValidator,
+    BaseModel,
+    ConfigDict,
+    Field,
+    NonNegativeFloat,
+    NonNegativeInt,
+    PositiveInt,
+    field_validator,
+    model_validator,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -96,16 +116,91 @@ def default_config_path() -> Path:
     )
 
 
-class DomainCfg(BaseModel):
-    model_config = ConfigDict(frozen=True)
+#: Column and table names are interpolated into SQL by the storage layer, and
+#: `api_key_env` is looked up in the process environment. Both are plain
+#: identifiers; this is the one place a spaced, quoted or dashed name can be
+#: stopped before it reaches an f-string.
+_IDENTIFIER = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
 
-    name: str
-    target_column: str
-    timestamp_column: str
+
+def _identifier(value: str) -> str:
+    if not _IDENTIFIER.fullmatch(value):
+        raise ValueError(
+            f"{value!r} is not a plain identifier: letters, digits and underscores only, not starting with a digit"
+        )
+    return value
+
+
+def _env_var_name(value: str) -> str:
+    """Like `_identifier`, but never echoes the value: the likeliest mistake in a
+    field that names a credential's variable is pasting the credential."""
+    if not _IDENTIFIER.fullmatch(value):
+        raise ValueError(
+            "must be the NAME of an environment variable (letters, digits, underscores), never the key itself; "
+            "the value given is not a valid name and is deliberately not shown"
+        )
+    return value
+
+
+def _unique(values: list) -> list:
+    duplicates = sorted({v for v in values if values.count(v) > 1}, key=repr)
+    if duplicates:
+        raise ValueError(f"contains duplicates: {duplicates}")
+    return values
+
+
+def _all_distinct(**named: str) -> None:
+    """Raise when two of the named fields share a value."""
+    by_value: dict[str, str] = {}
+    for field, value in named.items():
+        if value in by_value:
+            raise ValueError(f"{by_value[value]} and {field} are both {value!r}; they must name different things")
+        by_value[value] = field
+
+
+Identifier = Annotated[str, AfterValidator(_identifier)]
+#: A non-empty list of non-empty, distinct ids.
+UniqueIds = Annotated[list[Annotated[str, Field(min_length=1)]], Field(min_length=1), AfterValidator(_unique)]
+#: Hour counts: each at least one, no repeats. May be empty — "no lag features"
+#: is a legitimate, if odd, choice.
+HourList = Annotated[list[PositiveInt], AfterValidator(_unique)]
+
+
+class DomainCfg(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    name: str = Field(min_length=1)
+    target_column: Identifier
+    timestamp_column: Identifier
     #: Names the column that distinguishes one series from another in the raw
     #: table. The schema is long: adding a series adds rows, never columns.
-    entity_column: str
+    entity_column: Identifier
+    #: The step between consecutive observations, fixed at one hour.
+    #: `features.lags`, `features.rolling_windows`, `training.horizon_hours` and
+    #: the monitoring windows are all counted in hours, so any other step would
+    #: change what every one of them means without touching a line that reads
+    #: them. Making the step configurable is a feature — every "hours" becomes
+    #: "steps" — not a value to edit here.
     frequency: str
+
+    @field_validator("frequency")
+    @classmethod
+    def _hourly(cls, value: str) -> str:
+        if value != "1h":
+            raise ValueError(
+                f"must be '1h', got {value!r}: lags, rolling windows, the horizon and the monitoring windows are "
+                "all counted in hours, so a different step would silently change what each of them means"
+            )
+        return value
+
+    @model_validator(mode="after")
+    def _columns_differ(self) -> "DomainCfg":
+        _all_distinct(
+            target_column=self.target_column,
+            timestamp_column=self.timestamp_column,
+            entity_column=self.entity_column,
+        )
+        return self
 
 
 class SyntheticCfg(BaseModel):
@@ -114,12 +209,14 @@ class SyntheticCfg(BaseModel):
     kind: Literal["synthetic"] = "synthetic"
     #: One generated series per id. Keep at least two in any config the tests
     #: use: a grouping bug is invisible with a single group.
-    entity_ids: list[str] = Field(min_length=1)
+    entity_ids: UniqueIds
     base_load: float
     daily_amplitude: float
     weekly_amplitude: float
-    noise_sd: float
-    seed: int
+    #: `rng.normal(scale=...)` raises on a negative scale at first use.
+    noise_sd: NonNegativeFloat
+    #: `SeedSequence` and `default_rng` both reject a negative seed at first use.
+    seed: NonNegativeInt
 
 
 class EntsoeCfg(BaseModel):
@@ -128,10 +225,12 @@ class EntsoeCfg(BaseModel):
     kind: Literal["entsoe"] = "entsoe"
     #: Bidding zone codes. A list, never a bare string — `list("10YNL...")`
     #: silently yields sixteen single-character codes.
-    entity_ids: list[str] = Field(min_length=1)
+    entity_ids: UniqueIds
     #: The *name* of the environment variable holding the API key, never the key.
     #: Works identically under systemd, Docker and any cluster's secret store.
-    api_key_env: str
+    #: Validated as a name, with an error that does not repeat the value — see
+    #: `Config.model_config` for why the hiding has to happen at the top.
+    api_key_env: Annotated[str, AfterValidator(_env_var_name)]
     include_tso_forecast: bool = True
 
 
@@ -181,56 +280,102 @@ class SourceCfg(BaseModel):
 
 
 class StorageCfg(BaseModel):
-    model_config = ConfigDict(frozen=True)
+    model_config = ConfigDict(extra="forbid", frozen=True)
 
-    duckdb_path: str
-    raw_table: str
+    #: Not checked for existence: the file is created on first connect, and a
+    #: test points this at a temporary path that does not exist at load time.
+    duckdb_path: str = Field(min_length=1)
+    raw_table: Identifier
     #: The TSO's published forecast lands in its own table rather than as a
     #: column on the raw table: a forecast is not an observation, and toggling
     #: it must not change the raw table's schema.
-    raw_tso_table: str
-    feature_table: str
+    raw_tso_table: Identifier
+    feature_table: Identifier
+
+    @model_validator(mode="after")
+    def _tables_differ(self) -> "StorageCfg":
+        # Two of these naming one table is the feature build overwriting the raw
+        # observations, and nothing would raise.
+        _all_distinct(
+            raw_table=self.raw_table,
+            raw_tso_table=self.raw_tso_table,
+            feature_table=self.feature_table,
+        )
+        return self
 
 
 class FeaturesCfg(BaseModel):
-    model_config = ConfigDict(frozen=True)
+    model_config = ConfigDict(extra="forbid", frozen=True)
 
-    lags: list[int]
-    rolling_windows: list[int]
+    #: Counted from the forecast origin, so a lag of 0 would be the origin's
+    #: own value and a negative lag the future: both leakage, both refused.
+    lags: HourList
+    rolling_windows: HourList
     calendar: bool
+    #: A code the `holidays` package knows. The zone/country *mismatch* the
+    #: config comment warns about cannot be checked here — only a typo can.
     holidays_country: str
+
+    @field_validator("holidays_country")
+    @classmethod
+    def _known_country(cls, value: str) -> str:
+        import holidays  # local: keeps the config module cheap to import
+
+        if value not in holidays.list_supported_countries():
+            raise ValueError(f"{value!r} is not a country code the holidays package supports (e.g. 'NL')")
+        return value
 
 
 class TrainingCfg(BaseModel):
-    model_config = ConfigDict(frozen=True)
+    model_config = ConfigDict(extra="forbid", frozen=True)
 
-    horizon_hours: int
-    model: str
-    test_horizon_hours: int
-    primary_metric: str
-    random_state: int
+    horizon_hours: PositiveInt
+    #: The one model the system trains, by design (CLAUDE.md, *What this project
+    #: is*). Adding a name here is a decision, which is why it is a Literal.
+    model: Literal["hist_gradient_boosting"]
+    test_horizon_hours: PositiveInt
+    #: What `train.py` logs and what the promotion gate compares on. Lower is
+    #: better for both.
+    primary_metric: Literal["mae", "rmse"]
+    #: sklearn rejects a negative seed at `fit`.
+    random_state: NonNegativeInt
+
+    @model_validator(mode="after")
+    def _holdout_covers_horizon(self) -> "TrainingCfg":
+        # The gate compares models on the holdout across every horizon; a
+        # holdout shorter than the horizon cannot contain a single origin whose
+        # full horizon lies inside it.
+        if self.test_horizon_hours < self.horizon_hours:
+            raise ValueError(
+                f"test_horizon_hours ({self.test_horizon_hours}) must be at least horizon_hours "
+                f"({self.horizon_hours}), or the holdout cannot evaluate the full horizon"
+            )
+        return self
 
 
 class RegistryCfg(BaseModel):
-    model_config = ConfigDict(frozen=True)
+    model_config = ConfigDict(extra="forbid", frozen=True)
 
-    model_name: str
-    production_stage: str
+    model_name: str = Field(min_length=1)
+    #: MLflow stage names are case-sensitive at the API; a lowercase
+    #: "production" fails at promotion time, so it fails here instead.
+    production_stage: Literal["Staging", "Production"]
 
 
 class MonitoringCfg(BaseModel):
-    model_config = ConfigDict(frozen=True)
+    model_config = ConfigDict(extra="forbid", frozen=True)
 
-    reference_window_hours: int
-    current_window_hours: int
-    drift_threshold: float
+    reference_window_hours: PositiveInt
+    current_window_hours: PositiveInt
+    #: A share of features, so a value outside [0, 1] is not a threshold.
+    drift_threshold: float = Field(ge=0.0, le=1.0)
 
 
 class MlflowCfg(BaseModel):
-    model_config = ConfigDict(frozen=True)
+    model_config = ConfigDict(extra="forbid", frozen=True)
 
-    tracking_uri: str
-    experiment: str
+    tracking_uri: str = Field(min_length=1)
+    experiment: str = Field(min_length=1)
 
 
 class Config(BaseModel):
@@ -243,9 +388,23 @@ class Config(BaseModel):
     it was recorded, not necessarily what the code ran against. `load_config` is
     memoised besides, so a mutation would reach every later caller in the
     process.
+
+    `hide_input_in_errors` is set here, on the top-level model, because pydantic
+    renders a `ValidationError` with the config of the model that was *called*,
+    not the one whose field failed — setting it on `EntsoeCfg` alone was tried
+    and hides nothing. One field in this tree names a credential's variable,
+    and the likeliest mistake there is pasting the credential, so no validation
+    error anywhere may echo its input. Validators that can safely name the
+    offending value do so in their own message.
+
+    The flag scrubs every *rendered* form of the error — `str`, `repr`, a
+    traceback, a log line. It does not touch the *structured* forms:
+    `err.errors()` and `err.json()` still carry `input` unless called with
+    `include_input=False`. Anything that serialises a `ValidationError` — a run
+    record, a JSON log — has to pass that flag; the test suite pins both halves.
     """
 
-    model_config = ConfigDict(frozen=True)
+    model_config = ConfigDict(extra="forbid", frozen=True, hide_input_in_errors=True)
 
     domain: DomainCfg
     source: SourceCfg
