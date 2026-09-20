@@ -89,10 +89,24 @@ human has already engaged with, and do not write the implementation — that is 
 repo. On the delegated ones — Phase 4 configuration, Phase 7 plumbing — implement against tests
 the human wrote first, and expect the result to be reviewed against them before merge.
 
-Two working agreements. **A file the human is still writing is a draft**: its collection errors
+Three working agreements. **A file the human is still writing is a draft**: its collection errors
 are not findings, and nothing is filed against it until the human says it is done — when it is
-unclear which files are in flight, ask. **Mechanism before code**: open with the mental model and
-follow with the implementation, not the reverse.
+unclear which files are in flight, ask. What a session notices in one goes to *Draft observations*
+at the foot of `DEFECTS.md`, unnumbered, so that a `D<n>` stays a claim about finished code; it is
+promoted or deleted when the file is called done. The rule protects work in progress, and a
+finding routed into a conversation instead is a finding that dies with the window.
+
+**`tests/` is the human's, with two exceptions.** What a test asserts, which cases it carries,
+what a fixture provides and at what scope — that is the design thinking rung 3 exists for, and it
+stays the human's *even when a log spells the change out*. The session may do exactly two things
+there: add or remove a **quarantine** marker, which changes whether a module runs and never what it
+checks; and delete something a `DEFECTS.md` entry has already sentenced by name. Both cite the
+entry in the same commit. Anything that adds a fixture, changes a scope, or changes an assertion is
+the human's — the asymmetry decides it, since the cost of being too strict is two lines they type
+anyway, and the cost of being too loose is the exercise the repo exists for.
+
+**Mechanism before code**: open with the mental model and follow with the implementation, not the
+reverse.
 
 **Two things are the human's alone, even when asked.** The diff of their implementation against
 `reference/` — do not read that directory until they have done the diff themselves and bring a

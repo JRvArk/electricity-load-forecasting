@@ -579,6 +579,40 @@ row-per-request pagination, which is not the shape of the current one.
 
 ---
 
+## Draft observations — not findings
+
+A file the human is still writing is off-limits for a numbered entry until they call it done
+(`CLAUDE.md`, *Your role*). That rule protects work in progress, and it used to route whatever a
+session noticed into the conversation — the one place this repo says nothing may live. It lands
+here instead.
+
+**No `D<n>` id**, deliberately: an id is stable and citable, and these are notes about code that
+is still moving. Each line names the file, the symptom, and the commit whose draft was read. When
+the human calls a file done, every line against it is either promoted to a numbered entry or
+deleted; a line that survives several passes without being promoted was noise.
+
+*Against the ingestion drafts in `0738cc6`, read 2026-09-21.*
+
+- **`ingest.py`, `__main__`** — `if not any() or sum:` sits above `parse_args`. `any()` with no
+  arguments raises `TypeError`, so the entry point dies before parsing and `python -m
+  forecaster.ingestion.ingest` cannot run at all. Reads like a leftover from before the mutually
+  exclusive group.
+- **`ingest.py`, `store_data`** — `data_observations` is bound only inside
+  `if include_tso_forecast:`, which is `False` on the synthetic source, so
+  `conn.register("incoming", data_observations)` is an `UnboundLocalError` on the default path.
+  Separate from the TSO branch slicing the same frame twice, which the commit message names.
+- **`ingest.py`, `_assert_conformance`** — two gaps against D17's clauses. Tz-awareness is not
+  checked at all. And the per-entity diff is vacuous on a frame with one row per entity: the diff
+  series is empty and `.all()` on an empty series is `True`, so the guard passes. The `== expected
+  diff` test is otherwise a good economy — it catches non-hourly, duplicates (diff 0) and
+  non-monotonic (negative diff) in one comparison.
+- **`sources/entsoe.py`** — `data[ts].dt.tz_localize("UTC")` on a column that is already tz-aware
+  raises `TypeError: Already tz-aware`. Verified in the installed client: `query_load` ends with
+  `df.tz_convert(area.tz)`, so the index it returns carries the *area's* zone, not naive time. The
+  conversion wanted is `tz_convert`, and D17's contract wants UTC.
+
+---
+
 ## Plan, not code
 
 ### D16 — The box's stated rate floor does not reach the finish line

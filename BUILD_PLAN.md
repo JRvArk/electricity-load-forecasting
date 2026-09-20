@@ -286,6 +286,25 @@ rest.
 primitive, and a primitive that fails on large windows is not one. Splitting belongs to the adapter
 — the same "one backfill is several calls" this phase already anticipates.
 
+*Refined 2026-09-21, reading the installed client's decorators rather than its exception list.*
+Both calls this adapter makes — `query_load` and `query_load_forecast` — carry `@month_limited`,
+not `@paginated`. Three consequences, and each narrows the adapter's job:
+
+- **The client already splits a long window into month blocks.** A 90-day backfill is three calls
+  before the adapter does anything, so "one backfill is several calls" is largely handled. The
+  `PaginationError` the adapter must still catch is raised when a *single month* exceeds the API's
+  element limit — a cap on documents, not on days — so the split it retries with is *within* a
+  block, and the client's own `@paginated` (bisect and recurse) is the shape to copy, not import:
+  it is not applied to these two methods.
+- **`@month_limited` swallows `NoMatchingDataError` per block** and re-raises only when *every*
+  block is void. So a window whose middle month published nothing returns a shorter frame from a
+  successful call, with no signal. That is exactly D22's coverage question arriving from inside
+  the library: **the adapter may never infer the landed window from the fact that the call
+  returned.** Rows per entity against expected hours is the only honest measure.
+- **The frame's index is tz-aware in the *area's* zone**, not UTC and not naive: `query_load` ends
+  with `df.tz_convert(area.tz)`. D17's contract wants UTC, so the translation is `tz_convert`, and
+  a `tz_localize` raises (`DEFECTS.md`, *Draft observations*).
+
 **Per entity:** one zone's `NoMatchingDataError` contributes nothing while the others land; one
 zone's `HTTPError` fails the run, but whatever did arrive is still stored and the exit code is still
 non-zero. Storing a subset is only safe because **D20** fixes the upsert's key arity — before that
