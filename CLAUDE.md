@@ -118,7 +118,13 @@ for the current phase behind it for detail. When writing that message: an
 machine can see — and goes on the commit that carries the drafts, which is the last one before a
 machine switch, not a mid-session commit of something else. If the human's first message states
 where things are, that line wins over all three. If none of it yields the line "Phase N, here is
-the state", the gap is in the repo and is closed in the repo. Stay in a session while a debug
+the state", the gap is in the repo and is closed in the repo. **A claim that something is undecided is
+checked against the register before it is acted on or repeated.** Two of those three reads are
+pointers: they carry the authority of being read first and none of the durability, and `git log -1`
+is immutable besides, so a session's belief that a question is open keeps being asserted long after
+the register has settled it. One read of the decision table is cheaper than re-opening a settled
+decision — the more expensive mistake, because leaving something unsettled is visible and
+re-deciding it looks like work (`LEARNINGS.md` L11). Stay in a session while a debug
 loop is live — the failing output and what was already tried are its whole value — and when the
 context compacts, say so and suggest commit-close-reopen.
 
@@ -164,7 +170,10 @@ Route it by what kind of thing it is:
 - **`NEXT_STEPS.md`** — not a log but the *order* of the current pass: at most ten one-line
   entries, each pointing at the entry above that holds its detail, deleted when done. It never
   holds content; an ordering worked out in a conversation goes here in the same turn, for the
-  same reason a decision goes in the register.
+  same reason a decision goes in the register. It never says whether something is **decided**
+  either: that is the register's word, and a pointer repeating it goes stale where the register
+  cannot. The same holds for a commit message, and there it is worse — a commit message can never
+  be corrected. Cite the decision and let it speak.
 
 The bar for "settled" is low: if a question was answered and the answer changes what someone does,
 it belongs in one of the four — **and an explanation given as coaching counts.** A mechanism the

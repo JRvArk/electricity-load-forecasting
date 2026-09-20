@@ -863,3 +863,86 @@ their own without a second fixture per case.
 5. **`make_*` names the factories**; the return annotation gives the call shape.
 6. **Pair a factory with `parametrize`**, not with `params=`: the table of cases sits on the
    test, and the factory turns a row into an object.
+
+
+### L11 — A pointer can go stale; the thing it points at cannot
+**Pays off in:** every session open, since two of the three opening reads are pointers — and
+Phase 6, where the run-history table becomes a second place the same question can be asked and
+answered differently.
+
+#### What happened
+
+Decision E fixes ingestion's run window. Whether `(–, end, N)` — an explicit `end` with
+`--backfill-days` — was a legal combination looked like an open question: the `0738cc6` commit
+message called it *"a row decision E did not make"*, and `NEXT_STEPS.md` step 1 said *"decide the
+`(–, end, N)` row beside decision E"*. A session read the whole repo, reached row E, and carried
+the question forward as open anyway — then quoted E's own settling clause back as an argument for
+which way to decide it, without noticing the clause *was* the decision.
+
+E settles it twice: *"the sugar resolves to `end` = now floored to the hour"* leaves no supplied
+`end` to honour, and *"the two forms are mutually exclusive"* forbids mixing the two. (The row was
+later reopened deliberately and E amended — but on the merits, by the person who owns the design,
+which is a different act from never having read it.)
+
+#### The mechanism
+
+`CLAUDE.md` gives each file one job, and the jobs differ in *durability*:
+
+| file | holds | goes stale when |
+|---|---|---|
+| `BUILD_PLAN.md` register | the decision and its basis | never — an amendment edits it in place, with a date |
+| `DEFECTS.md` | an observed property of the code, and its fix | the code changes; the entry is struck, not deleted |
+| `NEXT_STEPS.md` | *sequence only*, never content | continuously — entries are deleted as they land |
+| a commit message | what was true of the tree at that commit | immediately — it is immutable and the repo is not |
+
+The last two are **pointers**. They are the fastest way to find the thing, and that is exactly
+why a claim inside them about the thing is dangerous: it reads with the authority of the file's
+position in the workflow — first thing a session reads — and none of the file's durability. A
+commit message in particular can never be corrected. It says what one session believed on one
+evening, and it keeps saying it after the belief is wrong.
+
+The failure mode is not "I did not read the authority". It is **reading the authority through a
+prior claim about it**, which is a different act: the claim supplies the conclusion and the
+reading supplies only corroboration, so a contradiction arrives looking like a detail. It is the
+same shape as `L1`'s correction — *a migration described in a log is not a migration that landed*
+— one level up: a note about the register is not the register.
+
+Reading everything does not fix this, and the episode is the proof: the session read the whole
+repo, E included, and still carried the question forward. **Contradiction-finding is an operation
+over pairs; reading is an operation over documents.** A complete read produces one summary per
+file and never forms the pair, so "read it all" buys coverage and not consistency. Consistency is
+a separate pass with the pairs named — a claim in a pointer, checked against the file that owns
+that kind of claim.
+
+Two things made this instance harder to catch than the general shape. The position had already
+been **stated to the human** before the authority was read, and a view that has been asserted is
+not re-opened by a later read; it is confirmed by one. And the register **strikes through settled
+rows**, which correctly means "not your decision to make" and incorrectly reads as "history, skim
+it" — while a settled row is exactly what must be read closely when something nearby claims there
+is an open question inside it. The formatting that makes the register scannable is what makes a
+settled row's operative clause skimmable.
+
+There is a converse to the rule this repo already states. *"If it exists only in a conversation,
+it is not decided"* has a second half: **if it exists in the register, it is decided**, and a
+session's job is to find it there rather than re-open it. Re-opening a settled decision costs
+more than leaving one unsettled, because the second is visible and the first looks like work.
+
+#### The practice
+
+1. **Route a question by its kind, then read the file that owns that kind.** "Is this decided?"
+   is answered in the register and nowhere else — not by a commit message, not by the ordering
+   file, not by the absence of a defect entry.
+2. **Treat "X is not decided" as a claim to check, not a fact to inherit** — the same standing as
+   L1's *"never committed"*. Checking costs one read of one table.
+3. **When a pointer and its target disagree, the target wins and the pointer gets fixed** in the
+   same turn. A stale pointer that is merely noticed will be re-read by the next session.
+4. **Read the authority before forming the question, not after.** A conclusion carried into a
+   document turns reading into confirmation, and the sentence that contradicts it reads as a
+   detail.
+5. **Notice when evidence is being spent on persuasion.** Quoting the deciding clause as support
+   for a recommendation is the signal that the clause was never treated as deciding anything.
+6. **A complete read is not a consistency check.** If contradictions between documents matter,
+   name the pairs and check them deliberately; no amount of reading each file produces it as a
+   by-product.
+7. **State a position after reading the authority, not before.** Once it has been said out loud
+   the later read can only confirm it.

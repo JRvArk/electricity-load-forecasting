@@ -289,6 +289,16 @@ from `ingestion.ingest`, which is `create_synthetic_data` in `ingestion/sources/
 a `cfg` parameter — while still constructing `SyntheticCfg` without `entity_ids`. The ingest test
 module is mid-rewrite; its half of this entry is re-checked when that lands.
 
+*Status, this pass.* Two of the three halves have moved. `FORECASTER_DUCKDB_PATH=":memory:"` is
+set beside `FORECASTER_CONFIG` at module scope in `conftest.py` (`0738cc6`), so reaching the real
+database is now impossible rather than discouraged. `test_build.py` is **quarantined**, not fixed:
+a module-level `pytest.skip(..., allow_module_level=True)` sits above its imports — it has to
+precede the failing import, since a module is executed in order to be collected — so the suite
+collects and a Phase 2 module no longer aborts the whole run. What that buys is L4's property, one
+red cause at a time, so the ingest rewrite's own failures are what the suite is reporting. The skip
+is deleted when Phase 2 rewrites the module. This entry stays open on its third half: the pre-L5
+fixtures and `load_config_for_test` in `test_ingest.py`.
+
 ### D23 — The run window is resolved twice, and inclusively
 **Blocks:** decision E, hard convention 1, and testing the window at all.
 
@@ -320,6 +330,25 @@ not present in an optimised interpreter.
 called once before dispatch. Sources receive a resolved half-open window and never see
 `backfill_days`. `inclusive="left"`. Raise rather than `assert`. The injected `now` is what makes
 the sugar testable without depending on the wall clock.
+
+*The window's rows, settled 2026-09-21* (decision E, amended). `backfill_days` is a **duration**,
+not a second form, so the rule is: **exactly two of `(start, end, duration)` must be determinable,
+with `end` defaulting to now floored to the hour.** Four rows are valid — `(start, end, –)`;
+`(start, –, –)` → `[start, now_floor)`; `(–, end, N)` → `[end - N days, end)`; `(–, –, N)` →
+`[now_floor - N days, now_floor)`. Three are refused: `(start, end, N)` as **over-determined**,
+because `end - start` and `N` can disagree and a silent winner is the defect; `(–, end, –)` as
+meaningless (L5); and the empty call.
+
+Three consequences for the implementation. Only the two rows without an `end` read the injected
+`now`, so `(–, end, N)` is testable with no clock at all. A window whose `end` lies in the future
+is **not** refused — a source asked for it returns nothing, which is coverage 0 rather than a
+failure (decision G), and on `kind: entsoe` the day-ahead forecast Phase 7 wants lives exactly
+there. And the CLI's mutually exclusive group is the wrong shape either way: it covers
+`--start_time` against `--backfill-days` while `--end_time` sits outside it, so it both permits
+`(start, end, N)` and cannot be made to express the arity rule. The rule lives in
+`resolve_window`, which raises; argparse stays thin over it (L5). `create_synthetic_data` already
+resolves `(–, end, N)` the way this settles it — that block still goes, because the defect is
+where it lives, not what it computes.
 
 ### D22 — `IngestResult` cannot express the gap decision E made it responsible for
 **Blocks:** Phase 7's missing-hours signal, and Phase 5's run-history table.
