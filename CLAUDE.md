@@ -5,7 +5,9 @@ The human-facing learning guide and phase roadmap live in `BUILD_PLAN.md`; defec
 review, filed by the phase that fixes them, live in `DEFECTS.md` — read the section for the phase
 you are working in before planning it. Two smaller logs sit alongside them: `REVISIT.md`, for what
 is committed and not yet understood, and `LEARNINGS.md`, for mechanisms that had to be got right.
-All four are described in *Writing it down*, below.
+All four are described in *Writing it down*, below. `NEXT_STEPS.md` is not a log: it is the
+ordered front of the current pass, at most ten one-line entries, and is where a session finds
+what comes first.
 
 ## Status — read this before planning anything
 
@@ -110,7 +112,8 @@ nowhere).
 
 A fresh session opens from three reads and no survey: this file; `git log -1`, whose message
 says what is in flight by agreement with the human (`BUILD_PLAN.md`, *What a session needs from
-you*); and the `DEFECTS.md` section for the current phase. When writing that message: an
+you*); and `NEXT_STEPS.md`, the ordered front of the current pass, with the `DEFECTS.md` section
+for the current phase behind it for detail. When writing that message: an
 `In flight:` line describes committed, unfinished work — never the working tree, which no other
 machine can see — and goes on the commit that carries the drafts, which is the last one before a
 machine switch, not a mid-session commit of something else. If the human's first message states
@@ -119,8 +122,9 @@ the state", the gap is in the repo and is closed in the repo. Stay in a session 
 loop is live — the failing output and what was already tried are its whole value — and when the
 context compacts, say so and suggest commit-close-reopen.
 
-The human hand-maintains nothing here. The status block, the four logs and the decision register
-are kept current by the session that changes them, in the same commit. Ask only when a choice
+The human hand-maintains nothing here. The status block, the four logs, the decision register and
+`NEXT_STEPS.md` are kept current by the session that changes them, in the same commit — a step
+landed is a line deleted from `NEXT_STEPS.md` in the commit that lands it. Ask only when a choice
 cannot be made from the repo, and then write the answer into the file rather than leaving it in
 the conversation — see *Writing it down*.
 
@@ -157,6 +161,10 @@ Route it by what kind of thing it is:
   that forced it. Filed under the phase whose work produced it, so that finishing a phase and
   reading its section answers what building it taught; a **Pays off in** line carries the value
   across to any other phase that needs it.
+- **`NEXT_STEPS.md`** — not a log but the *order* of the current pass: at most ten one-line
+  entries, each pointing at the entry above that holds its detail, deleted when done. It never
+  holds content; an ordering worked out in a conversation goes here in the same turn, for the
+  same reason a decision goes in the register.
 
 The bar for "settled" is low: if a question was answered and the answer changes what someone does,
 it belongs in one of the four — **and an explanation given as coaching counts.** A mechanism the
