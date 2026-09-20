@@ -16,9 +16,9 @@ open, after `git log -1`.
 
 ## Phase 1 pass — done when: ingest twice over one window leaves the count unchanged, and re-ingesting a corrected value overwrites it, on the synthetic source
 
-1. **Suite collects** — `tests/conftest.py:40` needs a body; `test_synthetic.py` has a bare `@`;
-   quarantine `test_build.py` with a module-level skip naming D9/D21. Target: `pytest` exits 0
-   with `tests_config` green and every ingest module collecting.
+1. **Suite collects** — quarantine `test_build.py` with a module-level skip naming D9/D21 (the
+   only module left that does not import). Target: `pytest` exits 0 with `tests_config` green and
+   every ingest module collecting; today it is 63 collected, 1 collection error.
 2. **`resolve_window`** — `VALID`/`REFUSED` tables first (fixed `NOW`, the `+02:00` and `+05:30`
    rows), then the function in `ingest.py`, the CLI thin over it, and the window blocks deleted
    from both sources. Closes D23; decide the `(–, end, N)` row beside decision E. Unblocks 3–7.

@@ -1,4 +1,5 @@
 import datetime
+import os
 
 import pandas as pd
 from entsoe.entsoe import EntsoePandasClient
@@ -14,24 +15,19 @@ def retrieve_entsoe_data(
 ) -> pd.DataFrame:
 
     if start is None:
-        assert backfill_days is not None, "If start is not specified, backfill_days must be provided."
+        if backfill_days is None:
+            raise ValueError("If start is not specified, backfill_days must be provided.")
         start = datetime.datetime.now(datetime.timezone.utc).replace(
             minute=0, second=0, microsecond=0
         ) - datetime.timedelta(days=backfill_days)
-    assert (start.minute, start.second, start.microsecond) == (0, 0, 0), (
-        "Start time must be at the beginning of an hour."
-    )
 
     if end is None:
         end = datetime.datetime.now(datetime.timezone.utc).replace(minute=0, second=0, microsecond=0)
-    assert (end.minute, end.second, end.microsecond) == (0, 0, 0), "End time must be at the beginning of an hour."
 
     start_pd = pd.Timestamp(start)
     end_pd = pd.Timestamp(end)
 
-    assert cfg.source.kind_cfg.kind == "entsoe", "This function is only for ENTSO-E data retrieval."
-
-    client = EntsoePandasClient(cfg.source.kind_cfg.api_key_env)
+    client = EntsoePandasClient(os.environ[cfg.source.kind_cfg.api_key_env])
     data = pd.DataFrame()
 
     entity_ids_list = (
@@ -60,5 +56,9 @@ def retrieve_entsoe_data(
             df_forecast.columns = [cfg.domain.target_column]  # Rename the column to the target column name
             df_forecast["entity_id_tso_forecast"] = entity  # Add a column to identify the entity
             data = pd.concat([data, df_forecast], axis=0)
+
+    data.reset_index(inplace=True, drop=False)
+    data.rename(columns={"index": cfg.domain.timestamp_column}, inplace=True)
+    data[cfg.domain.timestamp_column] = data[cfg.domain.timestamp_column].dt.tz_localize("UTC")
 
     return data

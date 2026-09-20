@@ -5,7 +5,7 @@ domain:
   name: electricity_load
   target_column: load_mw
   timestamp_column: ts
-  entity_column: series_id   # long schema: one row per (timestamp, series)
+  entity_column: entity_id   # long schema: one row per (timestamp, series)
   frequency: "1h"
 
 source:

@@ -30,6 +30,7 @@ seasonality plus noise is plenty. The modeling is not the point here.
 import argparse
 import datetime
 import logging
+import re
 import sys
 
 import duckdb
@@ -43,12 +44,70 @@ from forecaster.ingestion.sources.synthetic import create_synthetic_data
 logger = logging.getLogger(__name__)
 
 
-def _parse_time_arg(time_str: str) -> datetime.datetime:
+def _parse_and_validate_time_arg(time_str: str) -> datetime.datetime:
     """Parse a time argument in simple format, interpreted as UTC."""
+
     try:
-        return datetime.datetime.strptime(time_str, "%Y-%m-%d %H:%M:%S").replace(tzinfo=datetime.timezone.utc)
+        time = datetime.datetime.strptime(time_str, "%Y-%m-%d %H:%M:%S").replace(tzinfo=datetime.timezone.utc)
+        if (time.minute, time.second) != (0, 0):
+            raise ValueError(f"Time must be at the beginning of an hour, got {time_str}.")
+        return time
     except ValueError:
         raise argparse.ArgumentTypeError(f"Invalid time format: {time_str}. Expected format: 'YYYY-MM-DD HH:MM:SS'.")
+
+
+def _resolve_time_window(
+    start_time: str | None,
+    end_time: str | None,
+    backfill_days: int | None,
+) -> tuple[datetime.datetime, datetime.datetime]:
+    """Resolve the start and end times based on the provided arguments."""
+
+    if start_time is None and backfill_days is None:
+        raise ValueError("If start_time is not specified, backfill_days must be provided.")
+    elif start_time is None:
+        start_time = datetime.datetime.now(datetime.timezone.utc).replace(
+            minute=0, second=0, microsecond=0
+        ) - datetime.timedelta(days=backfill_days)
+
+    if start_time is not None:
+        start_time = _parse_and_validate_time_arg(start_time)
+
+    if end_time is not None:
+        end_time = _parse_and_validate_time_arg(end_time)
+    else:
+        end_time = datetime.datetime.now(datetime.timezone.utc).replace(minute=0, second=0, microsecond=0)
+
+    return start_time, end_time
+
+
+def _assert_conformance(cfg: Config, data_df: pd.DataFrame) -> None:
+    """Assert that the data_df conforms to the expected schema defined in cfg."""
+    expected_columns = [cfg.domain.timestamp_column, cfg.domain.target_column, cfg.domain.entity_column]
+    actual_columns = data_df.columns.to_list()
+
+    if len(actual_columns) != len(expected_columns):
+        raise ValueError(
+            f"DataFrame has {len(actual_columns)} columns, but expected {len(expected_columns)} columns. "
+            f"Expected: {expected_columns}, Actual: {actual_columns}"
+        )
+
+    for col in expected_columns:
+        if col not in actual_columns:
+            raise ValueError(
+                f"DataFrame columns do not match expected schema. Expected: {expected_columns}, Actual: {actual_columns}"
+            )
+
+    sorted_df = data_df.sort_values(by=[cfg.domain.entity_column, cfg.domain.timestamp_column])
+
+    # CHECK AND FIX
+    grouped_sorted_df = sorted_df.groupby(cfg.domain.entity_column)
+    time_diffs = grouped_sorted_df[cfg.domain.timestamp_column].diff().dropna()
+    expected_diff = pd.Timedelta(cfg.domain.frequency)
+    if not (time_diffs == expected_diff).all():
+        raise ValueError(
+            f"DataFrame timestamps are not hourly. Expected difference: {expected_diff}, Actual differences: {time_diffs.unique()}"
+        )
 
 
 def load_data(
@@ -71,25 +130,35 @@ def load_data(
 def store_data(
     conn: duckdb.DuckDBPyConnection,
     data_df: pd.DataFrame,
-    table_name: str,
-    timestamp_column_name: str,
+    cfg: Config,
 ) -> None:
-    conn.register("incoming", data_df)
-    conn.execute(f"CREATE TABLE IF NOT EXISTS {table_name} AS SELECT * FROM incoming WHERE 1=0")
+
+    include_tso_forecast = getattr(cfg.source.kind_cfg, "include_tso_forecast", False)
+    if include_tso_forecast:
+        data_observations = data_df[[cfg.domain.timestamp_column, cfg.domain.target_column, cfg.domain.entity_column]]
+        data_tso_forecast = data_df[[cfg.domain.timestamp_column, cfg.domain.target_column, cfg.domain.entity_column]]
+
+    conn.register("incoming", data_observations)
+    conn.execute(f"CREATE TABLE IF NOT EXISTS {cfg.storage.raw_table} AS SELECT * FROM incoming WHERE 1=0")
     # delete-then-insert overlapping keys = idempotent upsert
     conn.execute(
-        f"DELETE FROM {table_name} WHERE {timestamp_column_name} IN(SELECT {timestamp_column_name} FROM incoming)"
+        f"DELETE FROM {cfg.storage.raw_table} WHERE {cfg.domain.timestamp_column} IN(SELECT {cfg.domain.timestamp_column} FROM incoming)"
     )
-    conn.execute(f"INSERT INTO {table_name} SELECT * FROM incoming")
+    conn.execute(f"INSERT INTO {cfg.storage.raw_table} SELECT * FROM incoming")
+
+    if include_tso_forecast:
+        conn.register("tso_forecast", data_tso_forecast)
+        conn.execute(f"INSERT INTO {cfg.storage.raw_tso_table} SELECT * FROM tso_forecast")
+        conn.execute(
+            f"DELETE FROM {cfg.storage.raw_tso_table} WHERE {cfg.domain.timestamp_column} IN(SELECT {cfg.domain.timestamp_column} FROM tso_forecast)"
+        )
+        conn.execute(f"INSERT INTO {cfg.storage.raw_tso_table} SELECT * FROM tso_forecast")
 
 
 def ingest(
     cfg: Config, start_time: datetime.datetime | None, end_time: datetime.datetime | None, backfill_days: int | None
 ) -> IngestResult:
     start_time_ingestion = datetime.datetime.now(datetime.timezone.utc)
-
-    if start_time is None and end_time is None and backfill_days is None:
-        raise ValueError("Either --start_time, --end_time, or --backfill-days must be specified.")
 
     arg_dict = {}
     for arg_name, arg_value in [("start_time", start_time), ("end_time", end_time), ("backfill_days", backfill_days)]:
@@ -98,13 +167,20 @@ def ingest(
 
     try:
         data_df = load_data(cfg, **arg_dict)
+        _assert_conformance(cfg, data_df)
+        ingested_hours_per_entity = data_df.groupby(cfg.domain.entity_column).size().to_dict()
         with duckdb.connect(cfg.storage.duckdb_path) as conn:
             store_data(conn, data_df, cfg.storage.raw_table, cfg.domain.timestamp_column)
-        logger.info(f"Ingested {len(data_df)} rows into {cfg.storage.raw_table}.")
+        ingested_hours_per_entity = data_df.groupby(cfg.domain.entity_column).size().to_dict()
+        logger.info(
+            f"Ingested {len(data_df)} rows into {cfg.storage.raw_table}. Ingested hours per entity: {ingested_hours_per_entity}"
+        )
     except Exception as e:
         logger.error(f"Error occurred during ingestion: {e}")
         return IngestResult(
             source_cfg=cfg.source.kind_cfg,
+            entity_ids=cfg.source.kind_cfg.entity_ids,
+            ingested_hours_per_entity=None,  # THIS IS NOT NECESSARILY TRUE, I THINK, SINCE IT COULD FAIL MID-WAY. WHAT TO DO WHEN THAT HAPPENS? CLEAR THE TABLE FOR THAT TIME RANGE?
             backfill_days=backfill_days,
             error_occurred=True,
             message=f"Error occurred during ingestion: {e}",
@@ -117,6 +193,8 @@ def ingest(
     logger.info(f"Ingestion completed successfully at {datetime.datetime.now(datetime.timezone.utc)}.")
     return IngestResult(
         source_cfg=cfg.source.kind_cfg,
+        entity_ids=cfg.source.kind_cfg.entity_ids,
+        ingested_hours_per_entity=ingested_hours_per_entity,
         backfill_days=backfill_days,
         error_occurred=False,
         message="Ingestion completed successfully.",
@@ -129,17 +207,16 @@ def ingest(
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Ingest data into DuckDB.")
-    parser.add_argument(
+    group = parser.add_mutually_exclusive_group(required=True)
+    group.add_argument(
         "--backfill-days",
         type=int,
-        required=False,
         help="Number of days to backfill. If not provided, --start_time must be specified.",
         default=None,
     )
-    parser.add_argument(
+    group.add_argument(
         "--start_time",
         type=str,
-        required=False,
         help="Start time for ingestion in simple format, interpreted as UTC. Example: '2023-01-01 00:00:00'.",
         default=None,
     )
@@ -150,23 +227,15 @@ if __name__ == "__main__":
         help="End time for ingestion in simple format, interpreted as UTC. Example: '2023-01-02 00:00:00'.",
         default=None,
     )
-    if not any([arg in ["--backfill-days", "--start_time"] for arg in sys.argv]):
+
+    if not any() or sum:
         parser.error("At least one of --backfill-days, --start_time must be provided.")
+
     args = parser.parse_args()
-
-    if args.start_time:
-        start_time = _parse_time_arg(args.start_time)
-    else:
-        start_time = None
-
-    if args.end_time:
-        end_time = _parse_time_arg(args.end_time)
-    else:
-        end_time = None
-
+    start_time, end_time = _resolve_time_window(args.start_time, args.end_time, args.backfill_days)
     cfg: Config = load_config()
 
-    ingest_result = ingest(cfg, backfill_days=args.backfill_days, start_time=start_time, end_time=end_time)
+    ingest_result = ingest(cfg, start_time=start_time, end_time=end_time, backfill_days=args.backfill_days)
     if ingest_result.error_occurred:
         logger.error(f"Ingestion failed: {ingest_result.message}")
         sys.exit(1)
