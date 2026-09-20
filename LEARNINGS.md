@@ -124,6 +124,15 @@ Worth stating, because "it's in an env var" gets treated as a conclusion:
   recording a live response once (`DEFECTS.md` D17), which is precisely the moment the trap is set.
 - Loading it from a shell profile puts it in the environment of *every* process started on that
   machine. Loading it per-session keeps the blast radius to that shell and its children.
+- **A validation error echoes its input.** pydantic renders `input_value='…'` into every
+  `ValidationError`, so a token pasted into `api_key_env` — the likeliest mistake in a field that
+  names a variable — would be printed by the very error meant to refuse it. `config.py` sets
+  `hide_input_in_errors=True` on the **top-level** model: a nested model's setting is ignored,
+  because the error is rendered with the config of the model that was *called*. That scrubs every
+  rendered form — `str`, `repr`, a traceback, a log line — but not the structured ones:
+  `err.errors()` and `err.json()` still carry the input unless called with `include_input=False`.
+  A run record or a JSON log that serialises a validation error has to pass that flag. Pinned in
+  `tests/tests_config`, both halves.
 
 The property achieved is "not in the repo, not in any dump, not in any artifact" — not "safe from
 someone with a shell on the box".
@@ -576,3 +585,151 @@ Built-ins this repo depends on: `tmp_path` (a fresh directory per test — every
 5. **Shared fixtures live in the `conftest.py` above every module that uses them**; lookup goes
    up, not sideways, and a nearer same-named fixture shadows without warning.
 6. **`xfail` is `strict=True`** or it becomes a permanent hidden green.
+
+
+### L9 — How the config layer is built, and how to build the next one
+**Pays off in:** Phase 3, where the serving process decides whether it reads config once at
+import (L3's consequence); Phases 4 and 5, where the environment layer is what a Dockerfile,
+a compose file and a unit's `EnvironmentFile=` actually set; and the next project that needs a
+config module, which can start from the checklist at the end instead of from this file's history.
+Explaining this is also how `REVISIT.md` R2 gets struck.
+
+#### What happened
+
+`src/forecaster/config.py` was not designed once. It accreted through a sequence of things going
+wrong: a cache that returned a stale object (D7 → L3); a secret kept in a yaml file in the tree
+(L1); the tracked config being edited to `kind: entsoe` and that edit ending up inside a built
+wheel (D19), which produced the overlay; the question of what the environment may change
+(decision F); a regex parsing a frequency string at the point of use, which produced the
+validation pass; and, during that pass, the discovery that `hide_input_in_errors` on a nested
+model hides nothing. Each answered one question a config module has to answer. Read together,
+the answers are the design, and the design is what transfers.
+
+#### The mechanism — seven questions, and the tool that answers each
+
+**1. Where does the file come from?** Three shapes of installation want three answers, in
+order: a caller naming a file (`load_config(path)` or `$FORECASTER_CONFIG`), a checkout
+(`Path(__file__).resolve().parents[2] / "config" / "config.yaml"` — the module knows where it
+sits in the tree), and an installed wheel with no checkout above it, where
+`importlib.resources.files("forecaster") / "_default_config.yaml"` finds the copy that
+`pyproject.toml`'s `force-include` packaged. `default_config_path()` is that order, and the
+object records which one won (`config_path`) — provenance, so a run can say what it actually
+read. `pathlib` throughout: `resolve()`, `expanduser()`, `parents[n]`, `is_file()`.
+
+**2. How do layers combine, and which may change what?** The axes were decided before the
+schema, and the code follows them. *What the system is* — columns, feature spec, horizon,
+thresholds — is the tracked file, identical everywhere by being in git. *What it points at* is
+the gitignored overlay `config/local.yaml`, deep-merged over the file by `_deep_merge`
+(mappings merge key by key; lists and scalars replace wholesale — a half-merged list is never
+what anyone meant), and skipped when a config is *named*, because naming a file means meaning
+it. *Where things live* is the environment, through `_ENV_OVERRIDES`: an allowlist mapping a
+variable name to a key path, applied by `_apply_env_overrides` **before** validation so an
+override is type-checked like any other value. The allowlist is two entries long on purpose,
+and `source.kind` is not on it: a parent process can set an environment variable, so the
+environment must not be able to change what a run *means* (decision F, R2).
+
+**3. What shape is it?** One pydantic `BaseModel` per section, composed into `Config`. The
+vocabulary, each with the reason it is used here:
+
+- `ConfigDict(extra="forbid", frozen=True)` on every model. `extra="forbid"` makes a key nothing
+  reads an error, because a key nobody reads looks like configuration and is not — it catches a
+  typo in the overlay too. `frozen=True` on every model, not only the outer one, because
+  `cfg.domain.target_column = ...` would otherwise be legal on a memoised object shared by every
+  caller in the process (L3, practice 5).
+- `Literal["a", "b"]` for a closed set (`source.kind`, `training.model`, `primary_metric`,
+  `production_stage`): adding a value is a visible decision, and a wrong one fails at load rather
+  than at the API that would have rejected it.
+- `Annotated[type, AfterValidator(fn)]` for a constraint used in more than one place —
+  `Identifier`, `UniqueIds`, `HourList`. The alias *is* the documentation: a field typed
+  `Identifier` says what it must be without a validator on every model. `AfterValidator` runs
+  after pydantic's own type coercion, so `fn` sees a `str`, never raw yaml.
+- pydantic's constrained types where one exists — `PositiveInt`, `NonNegativeInt`,
+  `NonNegativeFloat` — and `Field(min_length=, ge=, le=)` for the rest. `Field(default_factory=)`
+  for a default that has to be computed.
+- `@field_validator("name")` + `@classmethod` for a rule about one field (`frequency`,
+  `holidays_country`); `@model_validator(mode="after")` for a rule *between* fields — three
+  columns that must differ, a holdout that must cover the horizon. After-mode runs on the
+  constructed object, so the validator reads `self.x`.
+- A **discriminated union by tag**: every source block carries `kind: Literal["synthetic"]`
+  (a default, so the yaml need not repeat it), `SourceCfg` holds *all* blocks and a `kind` naming
+  one, and `kind_cfg` returns the named block typed as the union. Holding every block means a
+  typo in the live block fails on an offline run, at a desk, rather than on the box. The
+  `_blocks_match_their_names` validator is the guard against the one way this shape can lie: a
+  field named `entsoe` holding a block tagged `synthetic`.
+- `from __future__ import annotations` so the annotations are strings and forward references
+  (`"DomainCfg"` in a validator's return type) cost nothing; `Annotated` and `Literal` from
+  `typing`.
+- A lazy `import holidays` *inside* the one validator that needs it, so the config module — which
+  everything imports — stays cheap to import.
+
+**4. What is validated, and what is not?** The rule in the module docstring: validate what would
+otherwise fail **later** or **silently**, and nothing else. Later: numbers numpy or sklearn
+reject at first use (a negative seed, a negative scale), names MLflow rejects at promotion time.
+Silently: a column name with a space reaching an SQL f-string, two storage keys naming one table
+so the feature build overwrites the observations, a step size the rest of the config assumes
+(`frequency` is pinned to `"1h"` because every other duration is counted in hours). Not
+validated: whether a path exists or a URI answers. Those are facts about the machine at runtime,
+and a validator that checks them makes the config unloadable in exactly the environments — CI, a
+test with a temp path — that the layers exist to serve.
+
+**5. How does it fail?** With one `ValidationError` carrying every failure at once, each with a
+`loc` tuple naming the field (`("training", "horizon_hours")`) or, for a model validator, the
+model (`("training",)`). Two consequences. Tests assert on `loc`, not on message text — the
+location is the contract, the wording is not. And the error echoes its input by default, which
+for a config that names a credential's variable is a leak the moment someone pastes the
+credential instead. `hide_input_in_errors=True` is therefore set on `Config` — **the top-level
+model, because pydantic renders with the config of the model that was called**, and setting it
+on `EntsoeCfg` hid nothing. The flag scrubs every rendered form; the structured `errors()` and
+`json()` still carry `input` unless passed `include_input=False` (L1). Validators that can safely
+name the offending value do so in their own message; `_env_var_name` deliberately does not.
+
+**6. How is it cached, and what invalidates it?** `load_config` is a thin public wrapper that
+computes the key — path, overlay path, both files' `st_mtime_ns`, and a snapshot of the
+environment variables that matter — and calls a private `lru_cache`d function whose unread
+parameters exist to be part of that key (L3). `cache_clear` is re-exported so a test can reset
+it. The consequence a long-lived process has to decide about: an edited file is picked up on the
+next call with no restart.
+
+**7. What does it say about itself, and what does it never say?** `project_root`, derived from
+the file actually loaded (not the default path — D7's second half) so `abs_path()` resolves
+relative paths against the right checkout, with the packaged case falling back to the working
+directory. `config_path` and `config_overlay`, so a run record can name what was in play. And
+never a secret: `api_key_env` is the *name* of a variable, read from the environment at the point
+of use (L1), so a full `model_dump_json()` of this object contains nothing to rotate.
+
+#### The accompanying files, and what each one is for
+
+`config/config.yaml` — the system; its comments carry the *reasons* for values, which is where
+a threshold's basis lives (decision C). `config/local.yaml` — gitignored, per machine, the live
+flip; created at provisioning alongside the credential file. `pyproject.toml`'s
+`[tool.hatch.build.targets.wheel.force-include]` — the packaged copy (and D19's trap).
+`tests/conftest.py` — `$FORECASTER_CONFIG` and `$FORECASTER_DUCKDB_PATH` set at *module scope*,
+so no test can inherit a working copy's overlay or reach the real database (L2, D21).
+`tests/tests_config/test_config.py` — the committed file loads; a `_with(raw, "a.b.c", value)`
+helper that deep-copies the committed dict and changes one key, so a test config can differ
+from the real one only where it says; a `REJECTED` table with one row per validator asserting
+the `loc`; an `ACCEPTED` table of borderline values a stricter validator would have to argue
+with; and the L1 test, pinning both the safe and the unsafe error forms.
+
+#### The practice — building the next one
+
+1. **Decide the axes before the schema.** What the system *is* goes in one tracked file. What
+   it *points at* is an overlay that cannot reach a clone. *Where things live* is an
+   environment allowlist, short, and never containing anything that changes what a run means.
+2. **One model per section; `extra="forbid"` and `frozen=True` on all of them.** Every field
+   required unless a default is a genuine default.
+3. **Closed sets are `Literal`s; reusable constraints are `Annotated` aliases; one-field rules
+   are `field_validator`s; relationships are `model_validator`s.** Use pydantic's constrained
+   types before writing your own.
+4. **Validate what fails later or silently. Leave runtime facts to runtime.** Write the rule in
+   the module docstring, so the next validator added is held to it.
+5. **Apply overrides before validation**, so an override is checked like a file value.
+6. **Discovery order: named → checkout → packaged. Record which won.**
+7. **Cache behind a key that names every input** — files by mtime, environment by snapshot —
+   with a public wrapper and a private cached function.
+8. **Config names secrets and never holds them; hide inputs in errors on the top model;
+   `include_input=False` wherever an error is serialised.**
+9. **Test the committed file, one rejected row per validator asserting `loc`, an accepted table
+   for the borderline, and derive every test config from the committed one.**
+10. **A discriminated union for "one of several backends": hold every block, tag each, and
+    guard the tag against the field name.**

@@ -111,7 +111,10 @@ Under-delivering against a stated target is a result. An unbounded finish is not
 
 From day one the project runs on a rented **x86-64 Linux VPS**
 (~€4/month), not the laptop. One evening to provision: create the instance, add an SSH key, disable root and password
-login, enable a firewall, install `tmux`.
+login, enable a firewall, install `tmux` — and create the two files that live outside git and make
+the box the *live* instance of the same system: the credential file (`LEARNINGS.md` L1) and
+`config/local.yaml` naming `source.kind: entsoe` (`config.py`, layer 2). The tracked config never
+changes to deploy; a checkout with neither file is the offline system, which is what CI runs.
 
 This is a **venue decision, not a new commitment.** Linux fluency is wanted, but a separate
 "learn Linux" track has been deliberately refused: it would compete for hours this project does

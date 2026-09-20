@@ -71,3 +71,27 @@ three predictions were right, this entry can be struck.
 `load_config()` share one object rather than six equal ones. Nothing in the tree depends on that
 today. Ask what would break if it stopped being true — that question is the difference between
 knowing what a cache does and knowing what this one is for.
+
+---
+
+## R2 — One tracked config, and three ways to vary it without forking it
+
+**Where:** `src/forecaster/config.py`, module docstring (the four layers) and `load_config`;
+decision F in `BUILD_PLAN.md`.
+**Revisit when:** before Phase 4, where the Dockerfile and compose file set the environment
+layer, and before Phase 5, where the box gets its overlay and `EnvironmentFile=` at provisioning.
+
+The question that filed this was whether the committed config should be a separate "CI config",
+with the real one kept elsewhere. It should not, and the reason is the design already in place:
+a config file is the *system's* definition — feature spec, horizon, tables, thresholds — and has
+to be byte-identical in CI, on a laptop and on the box, or the tests run against a different
+system than the one deployed. Only two things legitimately differ between environments, and each
+has its own layer: **which source** (the gitignored `config/local.yaml` overlay, which cannot
+reach a clone) and **where things live** (two allowlisted environment variables). An explicit
+`$FORECASTER_CONFIG` skips the overlay, which is how the test suite insulates itself (L2).
+
+**Check yourself:** without reading the docstring, say what `load_config()` returns, and where
+the live-source flip lives, in each of three places — a CI runner, the VPS with `local.yaml`
+present, and a test under `conftest.py`. Then say what goes wrong if `config.yaml` is edited to
+`kind: entsoe` and committed (`DEFECTS.md` D19 has the observed version). If all four are right,
+strike this entry.
