@@ -733,3 +733,133 @@ with; and the L1 test, pinning both the safe and the unsafe error forms.
    for the borderline, and derive every test config from the committed one.**
 10. **A discriminated union for "one of several backends": hold every block, tag each, and
     guard the tag against the field name.**
+
+
+### L10 — A factory fixture separates what a test depends on from what a test chooses
+**Pays off in:** Phase 2, whose feature tests need a raw frame per scenario — a gap, a DST
+transition, a window shorter than the longest lag — and a populated store built from it; Phase 3,
+where a test client is built per test against a monkeypatched registry; and Phase 6, whose drift
+tests need a baseline frame and a shifted frame from the same generator in one test.
+
+#### What happened
+
+The ingest test rewrite (L8) had three `params=` fixtures, one per window argument, and every
+test that touched any of them ran once per value — a product nobody had chosen. The way out was
+`make_synthetic_data` in `tests/conftest.py`: a session-scoped fixture that takes `cfg` and
+returns a *function*. A test that needs a frame calls it with the window that test needs; a test
+that needs two frames calls it twice; a test that needs none does not request it and is
+multiplied by nothing. L8 named the shape in a clause. This entry is how it works and how to
+build the next one.
+
+#### The mechanism
+
+A plain fixture is a **value**: pytest calls the fixture function once per scope, binds the
+return to the test's parameter, and the inputs that produced it are fixed where the fixture is
+written. A factory fixture is a **function**: the fixture stage resolves the dependencies and
+closes over them, and the *test* supplies the inputs when it calls. The two stages carry
+different things, and that is the whole idea:
+
+```python
+@pytest.fixture(scope="session")
+def make_synthetic_data(cfg):                      # fixture stage: dependencies, resolved by lookup
+    def _make(start_time: datetime, end_time: datetime) -> pd.DataFrame:
+        return create_synthetic_data(cfg=cfg, start_time=start_time, end_time=end_time)
+    return _make                                   # the value bound to the test is the function
+
+def test_hourly(make_synthetic_data):
+    frame = make_synthetic_data(START, START + timedelta(days=3))   # call stage: the case
+```
+
+Functionally `_make` is `functools.partial(create_synthetic_data, cfg=cfg)`: the fixture graph
+supplied `cfg`, the closure holds it, and the test never has to request `cfg` itself to build a
+frame. What the test writes is exactly the part that varies. Four properties follow.
+
+**Scope attaches to the wiring, not to the values.** The factory is `scope="session"` and that
+is safe, because what is shared across the run is an immutable function over a frozen `Config`
+(L3, practice 5). Every call returns a *fresh* frame, so a test that sorts one in place or adds
+a column corrupts nothing for the next test. A session-scoped fixture returning the frame itself
+would be the opposite: one mutable object, every consumer, order-dependent failures. The factory
+gives session-scoped setup with function-scoped results — the combination L8 practice 4 wants
+and a value fixture cannot provide.
+
+**One test, several objects.** Determinism is "two calls with the same inputs are equal";
+idempotency is "ingest a window, then an overlapping one, and the row count is the union"; a
+gap test is "a frame with an hour removed". Each needs more than one frame, or a frame the test
+has shaped, and a value fixture yields exactly one, already made. The count and the shape are
+the test's business, so the constructor belongs to the test.
+
+**Cases stay on the test, where they are chosen.** With a factory, `parametrize` lists the
+scenarios and the factory turns each into an object — the L5 table of named windows with no
+`params=` fixture multiplying anything, transitively or otherwise:
+
+```python
+@pytest.mark.parametrize("days", [pytest.param(1, id="one-day"), pytest.param(90, id="backfill")])
+def test_row_count(make_synthetic_data, cfg, days):
+    end = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    frame = make_synthetic_data(end - timedelta(days=days), end)
+    assert len(frame) == days * 24 * len(cfg.source.kind_cfg.entity_ids)
+```
+
+Multiplication is visible at the test that asked for it. A test that does not care about the
+window calls the factory once with a default and is one item.
+
+**The name says which parameters are callables.** `make_*` for a factory, a noun for a value.
+A test signature `(make_synthetic_data, cfg, tmp_path)` reads as "a constructor, a config, a
+directory" without opening `conftest.py`, and `Callable[[datetime, datetime], pd.DataFrame]` as
+the return annotation tells a reader the call shape.
+
+#### Building the next one
+
+Two extensions carry most of what later phases need.
+
+**Defaults, so the common case is a bare call.** A factory whose every argument has a default
+lets a test that does not care write `make_synthetic_data()` and a test that cares override one
+thing. It is the same move as `_with(raw, "a.b.c", value)` in `tests/tests_config`: derive from
+the baseline, change what the test is about, and nothing else. Keyword-only (`*`) so a caller
+cannot pass a window positionally and get the arguments crossed:
+
+```python
+@pytest.fixture(scope="session")
+def make_synthetic_data(cfg):
+    def _make(*, end: datetime = END, days: int = 3, entity_ids: list[str] | None = None) -> pd.DataFrame:
+        ...
+    return _make
+```
+
+**Teardown, when what it makes must be closed.** A factory that opens something — a DuckDB
+connection to a file under `tmp_path`, an MLflow run — keeps a list of what it made, `yield`s
+the function, and closes everything after. Then the scope has to drop to function, because the
+list is now mutable state and the connections belong to one test:
+
+```python
+@pytest.fixture
+def make_conn(tmp_path):
+    opened: list[duckdb.DuckDBPyConnection] = []
+    def _make(name: str = "store") -> duckdb.DuckDBPyConnection:
+        conn = duckdb.connect(str(tmp_path / f"{name}.duckdb"))
+        opened.append(conn)
+        return conn
+    yield _make
+    for conn in opened:
+        conn.close()
+```
+
+The Phase 2 shape composes the two: `make_synthetic_data` builds the frame, `make_conn` opens
+the store, and a `populated_store` fixture calls both and returns the connection — a *value*
+fixture again, because most feature tests want the same populated store and want it once. The
+factories are the layer underneath that lets the handful of tests with an unusual frame build
+their own without a second fixture per case.
+
+#### The practice
+
+1. **Fixture returns a function when the test must choose the inputs or the count.** Otherwise
+   a value is simpler; do not make every fixture a factory.
+2. **Close over dependencies; take the case as arguments.** The fixture graph supplies what is
+   fixed, the call supplies what varies, and the test requests neither more nor less than that.
+3. **Session scope is safe only while the factory returns fresh objects and holds no mutable
+   state.** The moment it tracks what it made for teardown, it is function-scoped.
+4. **Keyword-only arguments with defaults**, so the common call is empty and the specific call
+   names what it changes.
+5. **`make_*` names the factories**; the return annotation gives the call shape.
+6. **Pair a factory with `parametrize`**, not with `params=`: the table of cases sits on the
+   test, and the factory turns a row into an object.
