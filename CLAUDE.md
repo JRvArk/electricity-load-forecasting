@@ -5,9 +5,11 @@ The human-facing learning guide and phase roadmap live in `BUILD_PLAN.md`; defec
 review, filed by the phase that fixes them, live in `DEFECTS.md` — read the section for the phase
 you are working in before planning it. Two smaller logs sit alongside them: `REVISIT.md`, for what
 is committed and not yet understood, and `LEARNINGS.md`, for mechanisms that had to be got right.
-All four are described in *Writing it down*, below. `NEXT_STEPS.md` is not a log: it is the
-ordered front of the current pass, at most ten one-line entries, and is where a session finds
-what comes first.
+All four are described in *Writing it down*, below. Two tracked files are not logs. `NEXT_STEPS.md`
+is the ordered front of the current pass, at most ten one-line entries, and is where a session
+finds what comes first. `GLOSSARY.md` is what the vocabulary of the other five means *here*
+(decision H) — consult it rather than guessing, and add to it rather than using a word the files
+have never anchored.
 
 ## Status — read this before planning anything
 
@@ -188,6 +190,13 @@ Route it by what kind of thing it is:
   either: that is the register's word, and a pointer repeating it goes stale where the register
   cannot. The same holds for a commit message, and there it is worse — a commit message can never
   be corrected. Cite the decision and let it speak.
+- **`GLOSSARY.md`** — not a log but a *lookup*: what a term means in this repo, alphabetical, two
+  or three sentences, each anchored to where the term is already load-bearing. **It lags the repo
+  and never leads it** — a term enters because a tracked file depends on it, never because it
+  might be useful later, which is what keeps it from becoming the refused learning track. A term
+  needing more than three sentences is a `LEARNINGS.md` entry that this file points at. Writing an
+  unanchored word into a tracked file obliges the same session to anchor it here or choose another
+  word (decision H).
 
 The bar for "settled" is low: if a question was answered and the answer changes what someone does,
 it belongs in one of the four — **and an explanation given as coaching counts.** A mechanism the
