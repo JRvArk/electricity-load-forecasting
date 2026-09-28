@@ -442,28 +442,15 @@ timestamp, entity, value — and `ingest` upserts the second into `raw_tso_table
 `store_data` and the same (timestamp, entity) key. How the adapter returns two frames is the
 human's interface call; that it returns two is not. Fix the config comment in the same commit.
 
-### D27 — Decision E's arity rule does not settle `(start, –, duration)`, and the enumeration stops at seven cells
-**Blocks:** step 1's `REFUSED` table — the row is either in it or not, and nothing in the repo says which.
-
-Three flags make eight cells. D23's settled rows name seven: four valid, three refused. The eighth
-— a start and a duration, no end — is in neither list, and the criterion it would be derived from
-reads two ways:
-
-- **The default counts.** `end` always defaults to now floored, so `(start, –, N)` has three
-  determinable quantities and is refused as over-determined, exactly like `(start, end, N)`.
-- **Only what is given counts.** `(start, –, N)` gives two, so it resolves to
-  `[start, start + N days)` and never reads the clock.
-
-The second reading is the better fit for the amendment's own argument: `(–, end, N)` was admitted
-because a duration anchored to a given endpoint needs no clock, and that holds identically at the
-other end. Admitting one and refusing the other makes `backfill_days` mean "before `end`" rather
-than "the length of the window", which is not what the amendment says it is. But the amendment
-does not say, and "exactly two determinable" is genuinely ambiguous once one of the three has a
-default.
-
-**Fix:** decide the cell, record it in the register beside E, and state all eight rows here.
-Either way the CLI needs no new mechanism: D23 already puts the arity rule in `resolve_window`
-and leaves argparse thin over it.
+### ~~D27 — Decision E's arity rule does not settle `(start, –, duration)`, and the enumeration stops at seven cells~~
+**Fixed** in `74c3f7d`. Decision E's first amendment stated the rule as a count — *exactly two of
+`(start, end, duration)` determinable, with `end` defaulting to now* — and D23 listed seven of the
+eight cells it implies. The eighth, `(start, –, N)`, read two ways: refused as over-determined if
+the default counts, `[start, start + N days)` if only what is given counts. This entry leaned
+towards the second, on its symmetry with `(–, end, N)`. The register took the first — the literal
+reading, and the side that can be reversed without breaking a caller — and restated the rule
+without a count: exactly one of `start` and `duration`, with `end` optional. All eight rows are in
+D23, where the register points; the mechanism is L5's eighth-cell instance.
 
 ---
 
