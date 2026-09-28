@@ -30,7 +30,6 @@ seasonality plus noise is plenty. The modeling is not the point here.
 import argparse
 import datetime
 import logging
-import re
 import sys
 
 import duckdb
@@ -44,9 +43,8 @@ from forecaster.ingestion.sources.synthetic import create_synthetic_data
 logger = logging.getLogger(__name__)
 
 
-def _parse_and_validate_time_arg(time_str: str) -> datetime.datetime:
+def parse_time_arg(time_str: str) -> datetime.datetime:
     """Parse a time argument in simple format, interpreted as UTC."""
-
     try:
         time = datetime.datetime.strptime(time_str, "%Y-%m-%d %H:%M:%S").replace(tzinfo=datetime.timezone.utc)
         if (time.minute, time.second) != (0, 0):
@@ -56,9 +54,23 @@ def _parse_and_validate_time_arg(time_str: str) -> datetime.datetime:
         raise argparse.ArgumentTypeError(f"Invalid time format: {time_str}. Expected format: 'YYYY-MM-DD HH:MM:SS'.")
 
 
-def _resolve_time_window(
-    start_time: str | None,
-    end_time: str | None,
+def validate_time_arg(*args: datetime.datetime | list[datetime.datetime]) -> datetime.datetime:
+    """Parse a time argument in simple format, interpreted as UTC."""
+
+    if len(args) == 0:
+        raise ValueError("At least one time argument must be provided.")
+
+    try:
+        if (time.minute, time.second) != (0, 0):
+            raise ValueError(f"Time must be at the beginning of an hour, got {time_str}.")
+        return time
+    except ValueError:
+        raise argparse.ArgumentTypeError(f"Invalid time format: {time_str}. Expected format: 'YYYY-MM-DD HH:MM:SS'.")
+
+
+def resolve_time_window(
+    start_time: datetime.datetime | None,
+    end_time: datetime.datetime | None,
     backfill_days: int | None,
 ) -> tuple[datetime.datetime, datetime.datetime]:
     """Resolve the start and end times based on the provided arguments."""
@@ -232,7 +244,8 @@ if __name__ == "__main__":
         parser.error("At least one of --backfill-days, --start_time must be provided.")
 
     args = parser.parse_args()
-    start_time, end_time = _resolve_time_window(args.start_time, args.end_time, args.backfill_days)
+    validate_args(args)
+    start_time, end_time = resolve_time_window(args.start_time, args.end_time, args.backfill_days)
     cfg: Config = load_config()
 
     ingest_result = ingest(cfg, start_time=start_time, end_time=end_time, backfill_days=args.backfill_days)

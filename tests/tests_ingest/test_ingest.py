@@ -1,14 +1,10 @@
-from pathlib import Path
 
 import duckdb
 import pandas as pd
 import pytest
-import yaml
 
-from forecaster.config import DEFAULT_CONFIG_PATH, Config
 from forecaster.ingestion.ingest import ingest, store_data
 from forecaster.ingestion.ingest_result import IngestResult
-from forecaster.ingestion.sources.synthetic import create_synthetic_data
 
 
 # TO CONFTEST??
