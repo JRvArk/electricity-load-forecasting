@@ -400,6 +400,29 @@ a property that seems intrinsic to a value but actually depends on how the value
 is a property whose check has a *correct position* relative to the normalisation, and one row on
 each side of that position is what pins it.
 
+#### A worked instance of stating the rule: the eighth cell
+
+Decision E's amendment stated the rule as a count — *exactly two of `(start, end, duration)` must
+be determinable, with `end` defaulting to now* — and the count left one cell of eight in neither
+list (D27). `(start, –, N)` gives two and has three determinable, and the sentence does not say
+which it counts. Underneath is a question every default raises once a rule counts parameters: is
+the default a **value**, which counts, or a **fallback**, consulted only when what was given falls
+short? Both are coherent, and a count cannot say which it means — its reader picks one without
+noticing there was a choice.
+
+It was settled as a value (E, amended 2026-09-28), and the useful move was the restatement that
+allowed: *exactly one of `start` and `duration`, with `end` optional*. That sentence contains no
+count, so there is no cell it cannot place, and it exposed something the count had hidden: the
+CLI's required mutually exclusive group over `--start_time` and `--backfill-days` already was that
+rule, cell for cell, while D23 said it could not be made to express it. That does not make argparse
+the place for the rule — `ingest()` has callers argparse never sees, which is the rest of this
+entry — but exclusion and optionality can be checked against a parser, a case table and a
+docstring by reading them, where a count has to be enumerated first.
+
+The tie-break between the two readings generalises too. Refusing an input no caller needs is the
+reversible side: admitting it later breaks nobody, and refusing it later breaks whoever came to
+rely on it.
+
 #### The practice
 
 1. **If a test is awkward to parametrise, suspect the design before the test.** Awkwardness usually
@@ -417,6 +440,11 @@ each side of that position is what pins it.
 7. **When a property depends on representation, put one case on each side of the normalisation.**
    An aware non-UTC input that must come back as UTC, and one whose "on the hour" survives only in
    its own zone: together they fix where the check sits, not just that it exists.
+8. **State a rule over dependent parameters as exclusion and optionality**, not as a count of how
+   many must be present. A count is ambiguous the moment one parameter has a default; "exactly one
+   of these two, that one optional" is not, and it maps onto a parser and a case table directly.
+9. **Between admitting and refusing an input no caller needs, refuse.** Widening an interface is
+   compatible and narrowing it is not, so the refusal is the decision that can still be revisited.
 
 
 ### L6 — A lockfile pins only the paths that read it

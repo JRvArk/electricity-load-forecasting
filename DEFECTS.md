@@ -331,24 +331,37 @@ called once before dispatch. Sources receive a resolved half-open window and nev
 `backfill_days`. `inclusive="left"`. Raise rather than `assert`. The injected `now` is what makes
 the sugar testable without depending on the wall clock.
 
-*The window's rows, settled 2026-09-21* (decision E, amended). `backfill_days` is a **duration**,
-not a second form, so the rule is: **exactly two of `(start, end, duration)` must be determinable,
-with `end` defaulting to now floored to the hour.** Four rows are valid — `(start, end, –)`;
-`(start, –, –)` → `[start, now_floor)`; `(–, end, N)` → `[end - N days, end)`; `(–, –, N)` →
-`[now_floor - N days, now_floor)`. Three are refused: `(start, end, N)` as **over-determined**,
-because `end - start` and `N` can disagree and a silent winner is the defect; `(–, end, –)` as
-meaningless (L5); and the empty call.
+*The window's rows, settled 2026-09-21 and completed 2026-09-28* (decision E, amended twice; the
+eighth row was D27). `backfill_days` is a **duration**, not a second form, and `end` defaults to now
+floored to the hour — a default that **counts**, so the rule is: **exactly one of `start` and
+`duration`, with `end` optional.** Eight rows, four valid and four refused:
 
-Three consequences for the implementation. Only the two rows without an `end` read the injected
+| `start` | `end` | `N` | Outcome |
+|---|---|---|---|
+| S | E | – | `[S, E)` |
+| S | – | – | `[S, now_floor)` |
+| – | E | N | `[E - N days, E)` |
+| – | – | N | `[now_floor - N days, now_floor)` |
+| S | E | N | refused, **over-determined**: `E - S` and `N` can disagree, and a silent winner is the defect |
+| S | – | N | refused, **over-determined**: the same, against the defaulted `end` |
+| – | E | – | refused, under-determined: `end` alone fixes no start (L5) |
+| – | – | – | refused, under-determined: the empty call |
+
+Three consequences for the implementation. Only the valid rows without an `end` read the injected
 `now`, so `(–, end, N)` is testable with no clock at all. A window whose `end` lies in the future
 is **not** refused — a source asked for it returns nothing, which is coverage 0 rather than a
 failure (decision G), and on `kind: entsoe` the day-ahead forecast Phase 7 wants lives exactly
-there. And the CLI's mutually exclusive group is the wrong shape either way: it covers
-`--start_time` against `--backfill-days` while `--end_time` sits outside it, so it both permits
-`(start, end, N)` and cannot be made to express the arity rule. The rule lives in
-`resolve_window`, which raises; argparse stays thin over it (L5). `create_synthetic_data` already
-resolves `(–, end, N)` the way this settles it — that block still goes, because the defect is
-where it lives, not what it computes.
+there. And the CLI's mutually exclusive group is the wrong **place** for the rule, not the wrong
+shape. *(Corrected 2026-09-28: this said the group "both permits `(start, end, N)` and cannot be
+made to express the arity rule". It does neither — a required group over `--start_time` and
+`--backfill-days`, with `--end_time` outside it, was run over all eight cells and matches the table
+row for row, as it already did when that sentence was written.)* It is the wrong place because
+`ingest()` is also called by Phase 5's flow and by the tests, and neither passes through argparse:
+the rule lives in `resolve_window`, which raises, and a group kept beside it is a second
+implementation of one rule — the first change to the table is where the two would disagree.
+Argparse stays thin over it (L5). `create_synthetic_data` already resolves `(–, end, N)` the way
+this settles it — that block still goes, because the defect is where it lives, not what it
+computes.
 
 ### D22 — `IngestResult` cannot express the gap decision E made it responsible for
 **Blocks:** Phase 7's missing-hours signal, and Phase 5's run-history table.
