@@ -344,7 +344,9 @@ reads the window back out of run history.
 Ingestion takes `start`, `end` and `backfill_days`, and they are not independent: `[start, end)` is
 the primitive and `--backfill-days N` is sugar meaning `end = now floored to the hour`, `start = end
 - N days`. The two forms are mutually exclusive, `end` alone is meaningless, and neither form may be
-absent.
+absent. *(That is decision E as it stood when this was written; E has since been amended and its
+current rows are in the register and in D23. The mechanism below does not depend on which rows are
+valid — only on there being a table of them.)*
 
 The question that surfaced this was how to parametrise a test across their combinations. The honest
 answer was that the test was hard to write because the code was wrong: both source modules resolved
@@ -377,6 +379,27 @@ Two mechanical notes from the same corner:
   injectable parameter turns "the sugar resolves against now" from a flaky assertion into a
   deterministic one.
 
+#### A worked instance of "chosen, not generated": the two timezone rows
+
+The window's value checks — tz-aware, on the hour, `start < end` — look like they are about
+absence and arithmetic. Two rows that no product would contain show that one of them is about
+*representation*:
+
+- `2026-03-29 03:00+02:00` — Amsterdam, just after the spring clock change — is a **valid** input
+  and must come back as `01:00Z`. It pins that the resolver *normalises* to UTC rather than merely
+  tolerating an aware offset, which is a different property from "refuses naive".
+- `2026-03-01 10:00+05:30` is on the hour in its own zone and **half past** in UTC, so it belongs
+  in the refused table. "On the hour" is only invariant across timezones whose offset is a whole
+  number of hours; `+05:30`, `+05:45` and `+08:45` exist, and so did fractional historical offsets.
+
+The second row decides an *order of operations* inside the function: convert to UTC first, check
+the hour second. Checked the other way round, the `+05:30` input passes and the store receives a
+timestamp at `04:30Z` — no error anywhere, and D17's hourly check downstream is the first thing to
+notice, one function too late to say why. That is the pattern to look for when choosing cases:
+a property that seems intrinsic to a value but actually depends on how the value is written down
+is a property whose check has a *correct position* relative to the normalisation, and one row on
+each side of that position is what pins it.
+
 #### The practice
 
 1. **If a test is awkward to parametrise, suspect the design before the test.** Awkwardness usually
@@ -391,6 +414,9 @@ Two mechanical notes from the same corner:
    == timedelta(days=n)`, `end.minute == 0`, `start < end`.
 6. **Choose the hard cases deliberately** — boundaries, transitions, zero, and the forms the
    interface is supposed to reject. Nothing about a parameter matrix will find them for you.
+7. **When a property depends on representation, put one case on each side of the normalisation.**
+   An aware non-UTC input that must come back as UTC, and one whose "on the hour" survives only in
+   its own zone: together they fix where the check sits, not just that it exists.
 
 
 ### L6 — A lockfile pins only the paths that read it
@@ -709,7 +735,70 @@ so no test can inherit a working copy's overlay or reach the real database (L2, 
 helper that deep-copies the committed dict and changes one key, so a test config can differ
 from the real one only where it says; a `REJECTED` table with one row per validator asserting
 the `loc`; an `ACCEPTED` table of borderline values a stricter validator would have to argue
-with; and the L1 test, pinning both the safe and the unsafe error forms.
+with; and the L1 test, pinning both the safe and the unsafe error forms. How that file is
+built is the next section.
+
+#### How the tests are built
+
+The module answers two different questions, and each needs its own baseline.
+
+**Two baselines: the object and the dict.** `committed_cfg` is `load_config(DEFAULT_CONFIG_PATH)`
+— the validated, frozen object — and is what a test about *values* reads (the synthetic source
+has at least two entities). `committed_raw` is `yaml.safe_load` of the same file — a plain
+mutable dict — and is what every test about *validation* starts from. The split is forced:
+validation is a property of raw input, so it has to be tested by handing the schema something
+raw, and the object cannot be that something because `frozen=True` makes it unmutable on
+purpose. Both are session-scoped: read once, never written to, and `_with` copies before it
+touches anything. A third, `cfg` from the top `conftest.py`, goes through the full loader under
+`$FORECASTER_CONFIG` and is what `test_config_source` reads to pin `kind == "synthetic"` — the
+tripwire that keeps the suite offline on every machine, through the same path a run takes.
+
+**Cases construct `Config(**raw)`, not `load_config(path)`.** Every rejected and accepted row
+calls the schema directly. That removes the loader from the question: no temp file per case, no
+overlay, no environment allowlist, and no cache key — a case that went through `load_config`
+would need a distinct path or a `cache_clear()` per row, or the second row would hit the first
+row's entry (L3). The loader is exercised once, by `committed_cfg` and by `cfg`, where the
+question actually is "does the committed file load through the real path".
+
+**`_with` is derive-and-change-one.** Deep-copy the committed dict, split the dotted path,
+walk the parents, set the leaf. Every test config is therefore the real one plus exactly the
+edit the row names, so when the committed file gains a section or renames a key, the whole
+table follows without being touched — and a test can never pass because of some second
+difference nobody wrote down. It is the same move a factory with defaults makes (L10): the
+baseline is shared, the delta is the test's.
+
+**`REJECTED` has three columns because the `loc` is the assertion.** `(dotted, value, where)`,
+one row per validator, each a `pytest.param` with an `id` that names the rule
+(`holdout-shorter-than-horizon`, not `case-24`). The `where` column is where the mechanism
+shows: a `field_validator` reports at the field, `("domain", "frequency")`; a `model_validator`
+reports at the *model*, one segment shorter, `("domain",)` for two columns that collide,
+`("training",)` for a holdout shorter than the horizon; a constraint on a list element reports
+with the index, `("features", "lags", 0)`. Reading the column is reading which kind of
+validator each rule is. The last row, `unread-key-is-refused`, is a plausible typo of a real key
+and exists to pin `extra="forbid"`.
+
+**The assertion is membership, not equality.** `Config(**_with(...))` inside
+`pytest.raises(ValidationError)`, then `locations = [tuple(err["loc"]) for err in
+excinfo.value.errors()]` and `assert where in locations`. Pydantic collects *every* failure into
+one error, and breaking one key can legitimately produce more than one — a wrong `frequency`
+fails its own validator and may trip a model validator that reads it — so asserting the full list
+would couple the test to the cascade rather than to the rule. And it is the `loc` that is
+asserted, never message text: the location is the contract, the wording is free to change.
+
+**`ACCEPTED` has two columns and no `raises`.** `(dotted, value)`, construction succeeds, done.
+Its rows are values a stricter validator would refuse — an empty `lags` list, a negative
+`base_load`, `drift_threshold` at exactly `0.0` and `1.0`, `":memory:"` as a path. The table is
+the argument against over-validation, held in a form that fails if someone tightens a rule
+without deciding to: the boundary values are the point, since a `ge=0` written as `gt=0` fails
+`threshold-zero` and nothing else.
+
+**The L1 test pins the trap as well as the fix.** It pastes a token where the variable's name
+belongs, and asserts the token is absent from every *rendered* form — `str`, `repr`, the last
+line of `traceback.format_exception` — and from `errors(include_input=False)` and
+`json(include_input=False)`. Then it asserts the token *is* present in the default `errors()`.
+That last assertion looks backwards and is the important one: it documents that the structured
+form is unsafe, so a pydantic upgrade that changes the default in either direction turns the
+test red and gets read, rather than silently changing what a serialised error carries.
 
 #### The practice — building the next one
 
@@ -946,3 +1035,132 @@ more than leaving one unsettled, because the second is visible and the first loo
    by-product.
 7. **State a position after reading the authority, not before.** Once it has been said out loud
    the later read can only confirm it.
+
+### L12 — A helper earns its own tests when the front door is the expensive way in
+**Pays off in:** Phase 3's promotion gate and Phase 6's drift signal. Both are predicates with a
+case table behind a caller that does I/O, which is the shape this entry is about.
+
+#### What happened
+
+`tests/tests_ingest/test_ingest.py` covered `store_data` with four tests and `ingest` with one,
+and nothing else in the module. Of the five draft observations standing against the ingestion
+drafts at the foot of `DEFECTS.md`, four were against `_resolve_time_window` and
+`_assert_conformance` — the two functions with the most branching, and the two that no test in the
+file could reach. Every one of them was found by reading the code, not by running it.
+
+`NEXT_STEPS.md` had already decided the matter without stating the rule: step 1 builds
+`resolve_window`'s `VALID`/`REFUSED` tables before the function, and step 4 builds one hand-built
+malformed frame per clause of the conformance guard. Both are direct tests of functions the module
+spells with a leading underscore — and step 1 writes the name without one.
+
+#### The mechanism: coupling cost against reachability cost
+
+Testing through the public entry point costs nothing on refactor. A test that names `ingest()`
+survives a helper being renamed, inlined or split, because it never mentioned the helper. A test
+that names `_resolve_time_window` goes red when that function stops existing, although the
+program's behaviour is unchanged. That is the entire price of testing below the front door, and it
+is why the default runs the other way.
+
+Two costs push back, and either one alone is enough to pay it.
+
+**Reachability.** Some cases are cheap to construct at the helper and expensive to construct at
+the caller. Driving the conformance guard's gap clause through `ingest()` means making the
+generator emit a gap — a fake source built solely to exercise a guard. Handing the guard a
+hand-built frame is three lines. The gap between those two numbers is the reachability cost, and it
+is paid once per case.
+
+**Combinatorics.** A helper can have more interesting cases than its caller has interesting
+outcomes. `resolve_window` has a table — start only, backfill only, both, neither, non-hour-aligned,
+offset-bearing, naive — against perhaps two outcomes of `ingest()` worth asserting. Running the
+table through the caller multiplies every row by a generator run and a database connection, and
+every failure reports the caller's name rather than the row that broke. Localisation is not a
+side benefit here; a case table whose failures all say "ingest returned the wrong thing" has given
+up the reason it was a table.
+
+The underscore does not decide any of this. It is a convention about who may *call* a function,
+not who may *observe* one, and a test inside the module's boundary is entitled to look. What it
+does carry is a signal: **a helper that repeatedly earns its own case table is not a helper.** It
+is a unit with a contract of its own, and the name should lose the underscore — which is what step
+1 had already done to `resolve_window` in passing.
+
+The converse bounds it. A function extracted purely so that its caller reads well — one
+expression, no branches, no rejection cases — has no contract separate from the caller's and gets
+no tests of its own. `load_data`'s dispatch is nearly that; the one rule it owns is the raise on an
+unknown kind.
+
+#### The practice
+
+1. **Default to the public entry point**, so the test survives the refactor. Go below it only for
+   a named reason.
+2. **Go below it when a case is expensive to reach from outside** — when exercising one clause
+   would mean building a fake collaborator whose only job is to be wrong.
+3. **Go below it when the helper's case table is wider than the caller's outcomes.** Multiplying a
+   table by the caller's I/O buys nothing and loses the failure's address.
+4. **Pin the contract, not the steps.** "Which frames are refused, and with what exception", never
+   "it calls `groupby`" — asserting steps reintroduces exactly the coupling the default was
+   avoiding.
+5. **Treat a helper that keeps earning tests as a naming defect.** Drop the underscore, or move it
+   to its own module; the tests were telling you where a boundary already is.
+6. **A function extracted for readability is covered by its caller.** No branches and no rejections
+   means no contract of its own.
+
+
+### L13 — Convert at the boundary; an inner function takes domain types, not the text they arrived as
+**Pays off in:** Phase 5, where the scheduled flow calls the same rule in-process with no command
+line anywhere; Phase 7, which reads a window back out of run history as timestamps; and Phase 3,
+where a request body is the boundary and the model's input is the domain type.
+
+#### What happened
+
+The draft `_resolve_time_window(start_time: str | None, end_time: str | None, backfill_days: int
+| None)` both parsed CLI text and applied decision E's arity rule. Two symptoms came from that one
+choice. The backfill branch computed a `datetime` and handed it to the string parser on the next
+line — `TypeError: strptime() argument 1 must be str`, so the `--backfill-days` path could not
+produce a window at all. And when the `VALID`/`REFUSED` tables were being written, the two rows
+that matter most for timezones (L5, practice 7) turned out to be *inexpressible*: the parser is
+`strptime("%Y-%m-%d %H:%M:%S")` followed by `.replace(tzinfo=utc)`, which cannot represent
+`+02:00` at all, and silently relabels any offset as UTC.
+
+#### The mechanism
+
+A program has **boundaries** — a command line, an HTTP request, a yaml file, a database row — where
+information arrives as text, and an **interior** where it is a value with properties. Conversion
+belongs at the boundary, once, and everything inward takes the domain type. Four things follow, and
+the last is the one that is easy to miss.
+
+**The type is a claim about who may call it.** `str` admits `"banana"`; `datetime` carries
+tz-awareness and hour-alignment as properties that can be *checked* rather than parsed. A signature
+of `(datetime | None, datetime | None, int | None, datetime)` says "I take instants"; a signature of
+`(str | None, ...)` says "I take whatever the CLI happened to hand me", and the CLI is one caller of
+several. Phase 5's flow has no command line; making it `str(dt)` a value so an inner function can
+parse it back is a round trip whose only possible outcome is loss.
+
+**Two rules in one function multiply their cases.** Parsing answers "what does this text mean" and
+fails on format; resolution answers "what window do these three mean" and fails on arity. Together,
+every arity row would need a malformed-string variant to be honest — the same multiplication L5
+refused one level up. Apart, each has a small table of its own.
+
+**The output type should be admissible as input.** `resolve_window` returns `tuple[datetime,
+datetime]`; a version taking strings could not be fed its own result, so "re-resolving an already
+resolved window is identity" is not even statable. An interface whose output cannot be its input is
+usually one that converted in the wrong place.
+
+**What the boundary type can express bounds what the tests can say.** This is the consequence worth
+carrying. The two timezone rows exist to pin *where* normalisation sits relative to the hour check —
+and with `str` arguments they cannot be written, because the chosen format has no offset field. The
+test would not fail; it would be absent, and its absence would look like a decision nobody made.
+A weak boundary type does not merely inconvenience the tests — **it silently removes cases from
+what they are able to assert.**
+
+#### The practice
+
+1. **Convert at the boundary, once.** `argparse`'s `type=` is the designated hook, the same role
+   pydantic plays for yaml in `config.py` (L9) and a request model plays for HTTP.
+2. **Inner functions take domain types.** Ask which callers exist besides the one in front of you;
+   in a scheduled system there is always at least one with no text anywhere.
+3. **Keep format failures at the boundary and domain failures inside.** A bad format is a usage
+   error naming the flag; a bad window is the rule's own exception (L7), translated back into a
+   usage error by the entry point.
+4. **Check that the output type is admissible as input**, and prefer the signature where it is.
+5. **Before choosing a boundary format, ask which cases it makes unwriteable.** If a hard case
+   cannot be expressed in the type the function accepts, the type is the thing to change.

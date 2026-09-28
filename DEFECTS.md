@@ -429,6 +429,29 @@ timestamp, entity, value — and `ingest` upserts the second into `raw_tso_table
 `store_data` and the same (timestamp, entity) key. How the adapter returns two frames is the
 human's interface call; that it returns two is not. Fix the config comment in the same commit.
 
+### D27 — Decision E's arity rule does not settle `(start, –, duration)`, and the enumeration stops at seven cells
+**Blocks:** step 1's `REFUSED` table — the row is either in it or not, and nothing in the repo says which.
+
+Three flags make eight cells. D23's settled rows name seven: four valid, three refused. The eighth
+— a start and a duration, no end — is in neither list, and the criterion it would be derived from
+reads two ways:
+
+- **The default counts.** `end` always defaults to now floored, so `(start, –, N)` has three
+  determinable quantities and is refused as over-determined, exactly like `(start, end, N)`.
+- **Only what is given counts.** `(start, –, N)` gives two, so it resolves to
+  `[start, start + N days)` and never reads the clock.
+
+The second reading is the better fit for the amendment's own argument: `(–, end, N)` was admitted
+because a duration anchored to a given endpoint needs no clock, and that holds identically at the
+other end. Admitting one and refusing the other makes `backfill_days` mean "before `end`" rather
+than "the length of the window", which is not what the amendment says it is. But the amendment
+does not say, and "exactly two determinable" is genuinely ambiguous once one of the three has a
+default.
+
+**Fix:** decide the cell, record it in the register beside E, and state all eight rows here.
+Either way the CLI needs no new mechanism: D23 already puts the arity rule in `resolve_window`
+and leaves argparse thin over it.
+
 ---
 
 ## Phase 2 — Features + training
@@ -610,6 +633,19 @@ deleted; a line that survives several passes without being promoted was noise.
   raises `TypeError: Already tz-aware`. Verified in the installed client: `query_load` ends with
   `df.tz_convert(area.tz)`, so the index it returns carries the *area's* zone, not naive time. The
   conversion wanted is `tz_convert`, and D17's contract wants UTC.
+
+*Against the ingestion drafts as they stand in the working tree, read 2026-09-24.*
+
+- **`ingest.py`, `_resolve_time_window`** — the backfill branch assigns a `datetime` to
+  `start_time`, and the next block hands that same name to `_parse_and_validate_time_arg`, whose
+  `strptime` raises `TypeError: strptime() argument 1 must be str`. The `--backfill-days` path
+  therefore cannot reach a window at all. It is the shape D23's fix dissolves: the function takes
+  CLI strings, so parsing and resolution are one step and the already-resolved branch has nowhere
+  to go.
+- **`ingest.py`, `_parse_and_validate_time_arg`** — the bare `except ValueError` catches the
+  on-the-hour `ValueError` raised three lines above it inside the same `try`, and re-labels it
+  "Invalid time format", so a well-formed `2026-03-01 10:30:00` is reported as a format error.
+  The on-the-hour rule is `resolve_window`'s besides (D23), not the argument parser's.
 
 ---
 
