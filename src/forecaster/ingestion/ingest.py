@@ -75,13 +75,6 @@ def resolve_time_window(
 ) -> tuple[datetime.datetime, datetime.datetime]:
     """Resolve the start and end times based on the provided arguments."""
 
-    if start_time is None and backfill_days is None:
-        raise ValueError("If start_time is not specified, backfill_days must be provided.")
-    elif start_time is None:
-        start_time = datetime.datetime.now(datetime.timezone.utc).replace(
-            minute=0, second=0, microsecond=0
-        ) - datetime.timedelta(days=backfill_days)
-
     if start_time is not None:
         start_time = _parse_and_validate_time_arg(start_time)
 

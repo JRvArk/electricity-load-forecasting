@@ -645,7 +645,9 @@ deleted; a line that survives several passes without being promoted was noise.
 - **`ingest.py`, `_parse_and_validate_time_arg`** — the bare `except ValueError` catches the
   on-the-hour `ValueError` raised three lines above it inside the same `try`, and re-labels it
   "Invalid time format", so a well-formed `2026-03-01 10:30:00` is reported as a format error.
-  The on-the-hour rule is `resolve_window`'s besides (D23), not the argument parser's.
+  The on-the-hour rule is `resolve_window`'s besides (D23), not the argument parser's. *(Read
+  again 2026-10-01: since `18e20ad` the same `try` sits in `parse_time_arg`, and
+  `validate_time_arg`'s unfinished body repeats it.)*
 
 ---
 
